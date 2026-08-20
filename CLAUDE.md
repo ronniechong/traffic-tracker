@@ -34,3 +34,5 @@ Tracks freeway travel-time and congestion conditions across metropolitan Melbour
 
 ## Comment scope
 Code comments explain non-obvious **why** — a hidden constraint, a subtle invariant, a workaround for a specific bug — not a running decision log. Default to no comment. No timestamps, no "changed from X to Y because...", no restating what the diff already shows.
+
+No references to internal docs, planning artifacts, or process/discussion history: no milestone numbers or labels, no "spec-review", no paths to any private working-docs repo, no "resolved during X session/discussion". State the technical rationale itself (what's true about the system or the data) instead of citing where or when it was decided. This applies to docstrings and inline comments alike, everywhere in this repo, not just files that look sensitive at a glance.

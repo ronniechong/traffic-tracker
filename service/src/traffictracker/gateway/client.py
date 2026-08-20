@@ -34,7 +34,7 @@ DEFAULT_BASE_URL = (
 # anyway rather than relying on that leniency continuing. 5/min is the
 # conservative choice against the ~120s natural update cadence, which is
 # not itself checked here — pacing the *poll loop* to ~120s is a separate
-# concern (M02); this just enforces a hard floor no caller can exceed.
+# concern handled elsewhere; this just enforces a hard floor no caller can exceed.
 MIN_CALL_INTERVAL_SECONDS = 12.0
 
 
@@ -84,11 +84,19 @@ class RateLimiter:
                     await asyncio.sleep(remaining)
             self._last_call = time.monotonic()
 
+    def headroom_seconds(self) -> float:
+        """Seconds until the next call is permitted without waiting. 0 means
+        a call could go immediately."""
+        if self._last_call is None:
+            return 0.0
+        remaining = self._min_interval - (time.monotonic() - self._last_call)
+        return max(0.0, remaining)
+
 
 class GatewayClient:
     """Thin, single-purpose HTTP client for the `/traffic` and `/gis`
-    endpoints. Async, since the poll loop (M02) shares an event loop with
-    the API/SSE server.
+    endpoints. Async, since the poll loop shares an event loop with the
+    API/SSE server.
     """
 
     def __init__(
@@ -104,6 +112,10 @@ class GatewayClient:
         self._base_url = base_url_override or base_url()
         self._client = httpx.AsyncClient(timeout=timeout)
         self._rate_limiter = rate_limiter or RateLimiter()
+
+    @property
+    def rate_limiter(self) -> RateLimiter:
+        return self._rate_limiter
 
     async def aclose(self) -> None:
         await self._client.aclose()
