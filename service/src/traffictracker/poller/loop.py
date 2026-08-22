@@ -14,9 +14,12 @@ import random
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
+import httpx
+
 from traffictracker.gateway.client import Endpoint, GatewayClient
 from traffictracker.geometry_cache import LastKnownGeometryCache
 from traffictracker.models import SegmentRecord, normalize_feature
+from traffictracker.poller import healthcheck
 from traffictracker.poller.baseline import check_segment_baseline
 from traffictracker.poller.failures import FailureTracker
 from traffictracker.poller.metrics import (
@@ -69,10 +72,12 @@ async def run_poll_loop(
     client: GatewayClient,
     on_poll: OnPollCallback,
     stop_event: asyncio.Event | None = None,
+    healthcheck_client: httpx.AsyncClient | None = None,
 ) -> None:
     geometry_cache = LastKnownGeometryCache()
     failures = FailureTracker()
     stop_event = stop_event or asyncio.Event()
+    healthcheck_client = healthcheck_client or httpx.AsyncClient()
 
     while not stop_event.is_set():
         try:
@@ -91,6 +96,7 @@ async def run_poll_loop(
             record_poll_result(len(records), substitution_nonzero, null_geometry)
             RATE_LIMITER_HEADROOM_SECONDS.set(client.rate_limiter.headroom_seconds())
             await on_poll(records)
+            await healthcheck.ping(healthcheck_client)
 
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=_jittered_interval())
