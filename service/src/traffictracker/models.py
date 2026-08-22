@@ -13,7 +13,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from traffictracker.geometry_cache import LastKnownGeometryCache
+from traffictracker.geometry_cache import (
+    GeometryStatus,
+    GisGeometryCache,
+    LastKnownGeometryCache,
+    resolve_geometry_status,
+)
 from traffictracker.quality import SubstitutionTier, is_stale, substitution_tier
 from traffictracker.timeutil import parse_published_time_to_utc
 
@@ -30,7 +35,7 @@ class SegmentRecord:
     published_time_utc: datetime
     stale: bool
     geometry: dict[str, Any] | None
-    geometry_is_fallback: bool
+    geometry_status: GeometryStatus
     has_override: bool
     override_raw: dict[str, Any | None]
 
@@ -38,13 +43,16 @@ class SegmentRecord:
 def normalize_feature(
     feature: dict[str, Any],
     geometry_cache: LastKnownGeometryCache,
+    gis_geometry_cache: GisGeometryCache,
     now: datetime | None = None,
 ) -> SegmentRecord:
     props = feature["properties"]
     segment_id = props["id"]
 
     raw_geometry = feature.get("geometry")
-    resolved_geometry = geometry_cache.resolve(segment_id, raw_geometry)
+    resolved_geometry, geometry_status = resolve_geometry_status(
+        segment_id, raw_geometry, geometry_cache, gis_geometry_cache
+    )
 
     published_time_utc = parse_published_time_to_utc(props["publishedTime"])
 
@@ -59,7 +67,7 @@ def normalize_feature(
         published_time_utc=published_time_utc,
         stale=is_stale(published_time_utc, now=now),
         geometry=resolved_geometry,
-        geometry_is_fallback=raw_geometry is None and resolved_geometry is not None,
+        geometry_status=geometry_status,
         has_override=bool(props.get("hasOverride")),
         override_raw={
             "overrideStartTime": props.get("overrideStartTime"),

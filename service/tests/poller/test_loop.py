@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 import httpx
 
 from traffictracker.gateway.client import GatewayClient, RateLimiter
-from traffictracker.geometry_cache import LastKnownGeometryCache
-from traffictracker.poller.loop import poll_once, run_poll_loop
+from traffictracker.geometry_cache import GisGeometryCache, LastKnownGeometryCache
+from traffictracker.poller.loop import poll_gis, poll_once, run_poll_loop
 
 NOW = datetime(2026, 8, 20, 4, 15, 0, tzinfo=timezone.utc)
 
@@ -46,11 +46,23 @@ async def test_poll_once_normalizes_traffic_features():
     body = {"features": [_feature("seg-1"), _feature("seg-2")]}
     client = _client_with_response(body)
     cache = LastKnownGeometryCache()
+    gis_cache = GisGeometryCache()
 
-    records = await poll_once(client, cache, now=NOW)
+    records = await poll_once(client, cache, gis_cache, now=NOW)
 
     assert len(records) == 2
     assert {r.segment_id for r in records} == {"seg-1", "seg-2"}
+
+
+async def test_poll_gis_updates_geometry_cache_and_baseline():
+    body = {"features": [_feature("seg-1")]}
+    client = _client_with_response(body)
+    gis_cache = GisGeometryCache()
+
+    await poll_gis(client, gis_cache)
+
+    assert gis_cache.polled_at_least_once
+    assert gis_cache.geometry_for("seg-1") == _feature("seg-1")["geometry"]
 
 
 async def test_run_poll_loop_calls_on_poll_and_stops():

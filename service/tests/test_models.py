@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from traffictracker.geometry_cache import LastKnownGeometryCache
+from traffictracker.geometry_cache import GeometryStatus, GisGeometryCache, LastKnownGeometryCache
 from traffictracker.models import normalize_feature
 from traffictracker.quality import SubstitutionTier
 
@@ -28,24 +28,39 @@ def make_feature(**overrides):
 
 def test_normalizes_a_typical_feature():
     cache = LastKnownGeometryCache()
-    record = normalize_feature(make_feature(), cache, now=NOW)
+    gis_cache = GisGeometryCache()
+    record = normalize_feature(make_feature(), cache, gis_cache, now=NOW)
 
     assert record.segment_id == "Streams:897723"
     assert record.published_time_utc == datetime(2026, 8, 20, 4, 14, 0, 32000, tzinfo=timezone.utc)
     assert record.substitution_tier == SubstitutionTier.PARTIALLY_INTERPOLATED
     assert record.stale is False
-    assert record.geometry_is_fallback is False
+    assert record.geometry_status == GeometryStatus.AVAILABLE
     assert record.has_override is False
     assert record.override_raw["overrideStartTime"] is None
 
 
 def test_falls_back_to_cached_geometry_on_null():
     cache = LastKnownGeometryCache()
-    normalize_feature(make_feature(), cache, now=NOW)
+    gis_cache = GisGeometryCache()
+    normalize_feature(make_feature(), cache, gis_cache, now=NOW)
 
     feature_without_geometry = make_feature()
     feature_without_geometry["geometry"] = None
-    record = normalize_feature(feature_without_geometry, cache, now=NOW)
+    record = normalize_feature(feature_without_geometry, cache, gis_cache, now=NOW)
 
     assert record.geometry is not None
-    assert record.geometry_is_fallback is True
+    assert record.geometry_status == GeometryStatus.STALE_FALLBACK
+
+
+def test_never_available_when_neither_endpoint_has_geometry():
+    cache = LastKnownGeometryCache()
+    gis_cache = GisGeometryCache()
+    gis_cache.record_poll({"Streams:897723": None})
+
+    feature_without_geometry = make_feature()
+    feature_without_geometry["geometry"] = None
+    record = normalize_feature(feature_without_geometry, cache, gis_cache, now=NOW)
+
+    assert record.geometry is None
+    assert record.geometry_status == GeometryStatus.NEVER_AVAILABLE

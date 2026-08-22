@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS segment_readings (
     published_time_utc TEXT NOT NULL,
     polled_at_utc TEXT NOT NULL,
     stale INTEGER NOT NULL,
-    geometry_is_fallback INTEGER NOT NULL,
+    geometry_status TEXT NOT NULL,
     has_override INTEGER NOT NULL,
     override_raw TEXT NOT NULL
 );
@@ -133,7 +133,7 @@ class HistoryStore:
             INSERT INTO segment_readings (
                 segment_id, freeway_name, segment_name, direction, condition,
                 data_substitution, published_time_utc, polled_at_utc, stale,
-                geometry_is_fallback, has_override, override_raw
+                geometry_status, has_override, override_raw
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
@@ -147,7 +147,7 @@ class HistoryStore:
                     r.published_time_utc.isoformat(),
                     polled_at.isoformat(),
                     int(r.stale),
-                    int(r.geometry_is_fallback),
+                    r.geometry_status.value,
                     int(r.has_override),
                     json.dumps(r.override_raw),
                 )

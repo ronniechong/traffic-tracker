@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import date, datetime, timezone
 
+from traffictracker.geometry_cache import GeometryStatus
 from traffictracker.models import SegmentRecord
 from traffictracker.quality import SubstitutionTier
 from traffictracker.storage import HistoryStore, partition_path, prune_partitions_older_than
@@ -18,7 +19,7 @@ def _record(segment_id="S1", data_substitution=None, geometry=None) -> SegmentRe
         published_time_utc=datetime(2026, 8, 20, 7, 3, 0, tzinfo=timezone.utc),
         stale=False,
         geometry=geometry,
-        geometry_is_fallback=False,
+        geometry_status=GeometryStatus.AVAILABLE if geometry else GeometryStatus.PENDING,
         has_override=False,
         override_raw={
             "overrideStartTime": None,
