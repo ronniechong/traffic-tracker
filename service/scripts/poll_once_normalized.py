@@ -6,14 +6,15 @@ import asyncio
 from collections import Counter
 
 from traffictracker.gateway.client import GatewayClient
-from traffictracker.geometry_cache import LastKnownGeometryCache
+from traffictracker.geometry_cache import GisGeometryCache, LastKnownGeometryCache
 from traffictracker.poller.loop import poll_once
 
 
 async def main() -> None:
     cache = LastKnownGeometryCache()
+    gis_cache = GisGeometryCache()
     async with GatewayClient() as client:
-        records = await poll_once(client, cache)
+        records, _ = await poll_once(client, cache, gis_cache)
 
     print(f"{len(records)} segments normalized")
     print("tiers:", Counter(r.substitution_tier.value for r in records))

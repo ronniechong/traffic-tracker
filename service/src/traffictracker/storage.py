@@ -23,8 +23,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime, timezone
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from traffictracker.models import SegmentRecord
 
@@ -176,3 +178,96 @@ class HistoryStore:
             self._conn.close()
             self._conn = None
             self._open_day = None
+
+
+@dataclass(frozen=True)
+class CurrentReading:
+    segment_id: str
+    freeway_name: str
+    segment_name: str
+    direction: str
+    condition: str | None
+    data_substitution: float | None
+    published_time_utc: str
+    stale: bool
+    geometry_status: str
+    has_override: bool
+    geometry: dict[str, Any] | None
+
+
+def _open_readonly(path: Path) -> sqlite3.Connection | None:
+    """Opens a partition file read-only, returning None if it doesn't exist
+    yet -- a fresh deploy or an early hour of the day may not have written
+    yesterday's or today's partition at all."""
+    if not path.exists():
+        return None
+    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+
+
+def read_current_segments(
+    data_dir: Path = DEFAULT_DATA_DIR, now: datetime | None = None
+) -> list[CurrentReading]:
+    """Freshest reading per segment across the current UTC day's partition
+    and the previous day's -- two partitions cover the case where a segment
+    hasn't reported yet today but did shortly before UTC midnight.
+    """
+    reference = now or datetime.now(timezone.utc)
+    days = [reference.date(), reference.date() - timedelta(days=1)]
+
+    latest_by_segment: dict[str, CurrentReading] = {}
+    geometry_by_segment: dict[str, dict[str, Any]] = {}
+
+    for day in days:
+        conn = _open_readonly(partition_path(day, data_dir))
+        if conn is None:
+            continue
+        try:
+            rows = conn.execute(
+                """
+                SELECT segment_id, freeway_name, segment_name, direction, condition,
+                       data_substitution, published_time_utc, stale, geometry_status,
+                       has_override
+                FROM segment_readings
+                """
+            ).fetchall()
+            for geom_segment_id, geometry in conn.execute(
+                "SELECT segment_id, geometry FROM segment_geometry"
+            ).fetchall():
+                geometry_by_segment.setdefault(geom_segment_id, json.loads(geometry))
+        finally:
+            conn.close()
+
+        for row in rows:
+            (
+                segment_id,
+                freeway_name,
+                segment_name,
+                direction,
+                condition,
+                data_substitution,
+                published_time_utc,
+                stale,
+                geometry_status,
+                has_override,
+            ) = row
+            existing = latest_by_segment.get(segment_id)
+            if existing is not None and existing.published_time_utc >= published_time_utc:
+                continue
+            latest_by_segment[segment_id] = CurrentReading(
+                segment_id=segment_id,
+                freeway_name=freeway_name,
+                segment_name=segment_name,
+                direction=direction,
+                condition=condition,
+                data_substitution=data_substitution,
+                published_time_utc=published_time_utc,
+                stale=bool(stale),
+                geometry_status=geometry_status,
+                has_override=bool(has_override),
+                geometry=None,
+            )
+
+    return [
+        replace(r, geometry=geometry_by_segment.get(r.segment_id))
+        for r in latest_by_segment.values()
+    ]

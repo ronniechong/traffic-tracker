@@ -39,6 +39,7 @@ from traffictracker.poller.metrics import (
     record_poll_result,
 )
 from traffictracker.quality import SubstitutionTier
+from traffictracker.status_store import StatusSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ JITTER_RANGE_SECONDS = (5.0, 10.0)
 GIS_POLL_INTERVAL_SECONDS = 24 * 60 * 60.0
 
 OnPollCallback = Callable[[list[SegmentRecord]], Awaitable[None]]
+OnStatusCallback = Callable[[StatusSnapshot], Awaitable[None]]
 
 
 def _jittered_interval() -> float:
@@ -55,7 +57,7 @@ def _jittered_interval() -> float:
     return POLL_INTERVAL_SECONDS + random.choice([-1, 1]) * jitter
 
 
-async def poll_gis(client: GatewayClient, gis_geometry_cache: GisGeometryCache) -> None:
+async def poll_gis(client: GatewayClient, gis_geometry_cache: GisGeometryCache) -> bool:
     """Fetches `/gis`, updates the geometry cross-check cache, and runs
     `/gis`'s own independent segment-set baseline check. Failures are
     logged and left for the next scheduled `/gis` poll to retry — this is
@@ -68,7 +70,7 @@ async def poll_gis(client: GatewayClient, gis_geometry_cache: GisGeometryCache) 
     geometry_by_segment = {f["properties"]["id"]: f.get("geometry") for f in features}
     gis_geometry_cache.record_poll(geometry_by_segment)
 
-    check_gis_baseline(
+    return check_gis_baseline(
         segment_ids={f["properties"]["id"] for f in features},
         freeway_names={f["properties"]["freewayName"] for f in features},
     )
@@ -79,7 +81,7 @@ async def poll_once(
     geometry_cache: LastKnownGeometryCache,
     gis_geometry_cache: GisGeometryCache,
     now: datetime | None = None,
-) -> list[SegmentRecord]:
+) -> tuple[list[SegmentRecord], bool]:
     """`/traffic` is the more complete geometry source and the only one
     normalized into records every cycle; `/gis` is polled separately, on
     its own cadence (see `poll_gis`)."""
@@ -94,12 +96,12 @@ async def poll_once(
         for f in features
     ]
 
-    check_segment_baseline(
+    traffic_baseline_stable = check_segment_baseline(
         segment_ids={r.segment_id for r in records},
         freeway_names={r.freeway_name for r in records},
     )
 
-    return records
+    return records, traffic_baseline_stable
 
 
 async def run_poll_loop(
@@ -107,6 +109,7 @@ async def run_poll_loop(
     on_poll: OnPollCallback,
     stop_event: asyncio.Event | None = None,
     healthcheck_client: httpx.AsyncClient | None = None,
+    on_status: OnStatusCallback | None = None,
 ) -> None:
     geometry_cache = LastKnownGeometryCache()
     gis_geometry_cache = GisGeometryCache()
@@ -115,23 +118,41 @@ async def run_poll_loop(
     healthcheck_client = healthcheck_client or httpx.AsyncClient()
 
     next_gis_poll_at = 0.0  # due immediately on startup (bootstrap)
+    # None until the first successful poll of each endpoint -- a failed poll
+    # doesn't invalidate the last known baseline result, so these persist
+    # across failure cycles rather than resetting.
+    gis_baseline_stable: bool | None = None
+    traffic_baseline_stable: bool | None = None
 
     while not stop_event.is_set():
         if time.monotonic() >= next_gis_poll_at:
             try:
-                await poll_gis(client, gis_geometry_cache)
+                gis_baseline_stable = await poll_gis(client, gis_geometry_cache)
             except Exception as error:  # noqa: BLE001 - /gis failures must not crash the loop
                 logger.warning("/gis poll failed, will retry next cycle: %s", error)
             else:
                 next_gis_poll_at = time.monotonic() + GIS_POLL_INTERVAL_SECONDS
 
         try:
-            records = await poll_once(client, geometry_cache, gis_geometry_cache)
+            records, poll_traffic_baseline_stable = await poll_once(
+                client, geometry_cache, gis_geometry_cache
+            )
         except Exception as error:  # noqa: BLE001 - poll failures must not crash the loop
             failures.record_failure(error)
             record_poll_failure()
             CONSECUTIVE_FAILURES.set(failures.consecutive_failures)
+            if on_status is not None:
+                await on_status(
+                    StatusSnapshot(
+                        consecutive_failures=failures.consecutive_failures,
+                        circuit_tripped=failures.circuit_tripped,
+                        traffic_baseline_stable=traffic_baseline_stable,
+                        gis_baseline_stable=gis_baseline_stable,
+                        updated_at_utc=datetime.now(timezone.utc).isoformat(),
+                    )
+                )
         else:
+            traffic_baseline_stable = poll_traffic_baseline_stable
             failures.record_success()
             CONSECUTIVE_FAILURES.set(0)
             substitution_nonzero = sum(
@@ -142,6 +163,16 @@ async def run_poll_loop(
             RATE_LIMITER_HEADROOM_SECONDS.set(client.rate_limiter.headroom_seconds())
             await on_poll(records)
             await healthcheck.ping(healthcheck_client)
+            if on_status is not None:
+                await on_status(
+                    StatusSnapshot(
+                        consecutive_failures=failures.consecutive_failures,
+                        circuit_tripped=failures.circuit_tripped,
+                        traffic_baseline_stable=traffic_baseline_stable,
+                        gis_baseline_stable=gis_baseline_stable,
+                        updated_at_utc=datetime.now(timezone.utc).isoformat(),
+                    )
+                )
 
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=_jittered_interval())

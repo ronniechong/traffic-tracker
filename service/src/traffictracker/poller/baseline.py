@@ -26,31 +26,39 @@ GIS_BASELINE_SEGMENT_COUNT = 246
 GIS_BASELINE_FREEWAY_COUNT = 12
 
 
-def check_segment_baseline(segment_ids: set[str], freeway_names: set[str]) -> None:
+def check_segment_baseline(segment_ids: set[str], freeway_names: set[str]) -> bool:
+    stable = True
     if len(segment_ids) != BASELINE_SEGMENT_COUNT:
         logger.warning(
             "segment count drifted from baseline: expected %d, got %d",
             BASELINE_SEGMENT_COUNT,
             len(segment_ids),
         )
+        stable = False
     if len(freeway_names) != BASELINE_FREEWAY_COUNT:
         logger.warning(
             "freeway count drifted from baseline: expected %d, got %d",
             BASELINE_FREEWAY_COUNT,
             len(freeway_names),
         )
+        stable = False
+    return stable
 
 
-def check_gis_baseline(segment_ids: set[str], freeway_names: set[str]) -> None:
+def check_gis_baseline(segment_ids: set[str], freeway_names: set[str]) -> bool:
+    stable = True
     if len(segment_ids) != GIS_BASELINE_SEGMENT_COUNT:
         logger.warning(
             "/gis segment count drifted from baseline: expected %d, got %d",
             GIS_BASELINE_SEGMENT_COUNT,
             len(segment_ids),
         )
+        stable = False
     if len(freeway_names) != GIS_BASELINE_FREEWAY_COUNT:
         logger.warning(
             "/gis freeway count drifted from baseline: expected %d, got %d",
             GIS_BASELINE_FREEWAY_COUNT,
             len(freeway_names),
         )
+        stable = False
+    return stable
