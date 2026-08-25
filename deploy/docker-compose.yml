@@ -54,6 +54,7 @@ services:
     tmpfs:
       - /tmp
     environment:
+      TT_METRICS_HOST: ${TT_METRICS_HOST:-0.0.0.0}
       VIC_TRAFFIC_API_SUBSCRIPTION_KEY: ${VIC_TRAFFIC_API_SUBSCRIPTION_KEY:?VIC_TRAFFIC_API_SUBSCRIPTION_KEY must be set in deploy/.env}
       # Best-effort: ping() never raises, so an unset or unreachable target
       # never crashes the poller loop.
@@ -71,15 +72,8 @@ services:
       - internal
       # Joins the host's already-existing general monitoring stack's
       # network so its Prometheus can scrape this container by service
-      # name. The poller's own /metrics server (poller/metrics.py) binds
-      # 127.0.0.1 inside the container and has no env-configurable bind
-      # host in the current code, so nothing outside this container's own
-      # network namespace -- including other containers on `monitoring` --
-      # can actually reach it yet. The network join is left in place to
-      # match the intended scrape path once the bind host is
-      # env-configurable (or an alternative scrape approach, e.g. a
-      # sidecar exporter, is used instead); until then this join has no
-      # effect.
+      # name (poller:9109) -- no ports are published to the host, so
+      # reachability is scoped entirely by network membership.
       - monitoring
 
   api:

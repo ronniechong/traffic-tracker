@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 
 from traffictracker.gateway.client import GatewayClient
@@ -20,7 +21,10 @@ from traffictracker.storage import HistoryStore
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-METRICS_HOST = "127.0.0.1"
+# Reachability is scoped by which Docker networks this container joins, not
+# by binding to loopback — the container publishes no ports to the host, so
+# 0.0.0.0 here is only reachable from containers sharing one of those networks.
+METRICS_HOST = os.environ.get("TT_METRICS_HOST") or "0.0.0.0"  # noqa: S104
 METRICS_PORT = 9109
 
 
