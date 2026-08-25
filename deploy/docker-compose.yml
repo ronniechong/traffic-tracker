@@ -1,0 +1,192 @@
+# "The stack": cd deploy && docker compose up -d
+#
+# Explicit project name: Compose defaults the project name to the current
+# directory's basename ("deploy"), which any other project also named
+# `deploy/` on the same Docker host collides on -- container, network, and
+# volume names all derive from the project name, so an unrelated project's
+# `docker compose up` can silently recreate THIS stack's containers under
+# shared names, and vice versa. Naming it explicitly makes every resource
+# this stack creates namespaced as `traffic-tracker-*`, structurally
+# incapable of colliding with another project's `deploy/` directory.
+name: traffic-tracker
+
+# Egress design: `poller` is on the `internal` network ONLY. Compose marks
+# that network `internal: true`, so Docker never gives it a default route to
+# the outside world -- the network itself has no NAT, not just a firewall
+# rule that could be misconfigured. `poller` can reach `egress-proxy` (also
+# on `internal`) and nothing else. `egress-proxy` additionally sits on
+# `egress` (a normal bridge network with a route out) and further restricts
+# *which* outside host it will forward to, via tinyproxy.filter -- two
+# independent layers, not one.
+#
+# `api` is a separate long-running service from `poller` (unlike a design
+# where one process does both). It makes zero outbound calls of its own --
+# it only reads the shared data volume -- so it never joins `internal` or
+# `egress` at all; its only network membership is `ingress`, shared with
+# nothing but `caddy`.
+services:
+  egress-proxy:
+    # Image only ships a `latest` tag; pin by digest before this stack goes
+    # live so an upstream push can't silently change what's running.
+    image: docker.io/vimagick/tinyproxy:latest
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - ./tinyproxy.conf:/etc/tinyproxy/tinyproxy.conf:ro
+      - ./tinyproxy.filter:/etc/tinyproxy/tinyproxy.filter:ro
+    networks:
+      - internal
+      - egress
+
+  poller:
+    build:
+      context: ../service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    read_only: true
+    # The image's built-in `app` user is uid 999, which can't write to
+    # `TT_DATA_DIR` on the host -- that directory is owned by whichever
+    # host user runs `docker compose`, not a fixed uid the image can know
+    # in advance. Overriding to match the host user (same approach `caddy`
+    # below already uses for its own volumes) avoids a permission-denied
+    # crash loop without needing a host-side chown.
+    user: "1000:1000"
+    tmpfs:
+      - /tmp
+    environment:
+      VIC_TRAFFIC_API_SUBSCRIPTION_KEY: ${VIC_TRAFFIC_API_SUBSCRIPTION_KEY:?VIC_TRAFFIC_API_SUBSCRIPTION_KEY must be set in deploy/.env}
+      # Best-effort: ping() never raises, so an unset or unreachable target
+      # never crashes the poller loop.
+      TT_DEADMAN_PING_URL: ${TT_DEADMAN_PING_URL:-}
+      HTTP_PROXY: http://egress-proxy:8888
+      HTTPS_PROXY: http://egress-proxy:8888
+      # Loopback exempted so in-container tooling can reach localhost
+      # without punching a new egress-allowlist hole.
+      NO_PROXY: "localhost,127.0.0.1"
+    volumes:
+      - ${TT_DATA_DIR:-./data}:/app/data
+    depends_on:
+      - egress-proxy
+    networks:
+      - internal
+      # Joins the host's already-existing general monitoring stack's
+      # network so its Prometheus can scrape this container by service
+      # name. The poller's own /metrics server (poller/metrics.py) binds
+      # 127.0.0.1 inside the container and has no env-configurable bind
+      # host in the current code, so nothing outside this container's own
+      # network namespace -- including other containers on `monitoring` --
+      # can actually reach it yet. The network join is left in place to
+      # match the intended scrape path once the bind host is
+      # env-configurable (or an alternative scrape approach, e.g. a
+      # sidecar exporter, is used instead); until then this join has no
+      # effect.
+      - monitoring
+
+  api:
+    build:
+      context: ../service
+      dockerfile: Dockerfile
+    entrypoint: ["python", "-m", "traffictracker.api"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?FRONTEND_ORIGIN must be set in deploy/.env}
+      # The in-process default (127.0.0.1) would make this container
+      # unreachable from the `caddy` container despite both sharing the
+      # `ingress` network -- the loopback-bind security guarantee is
+      # provided here by network isolation and Caddy being the sole path
+      # in, not by an in-container bind that only self-isolation would
+      # need.
+      TT_API_HOST: 0.0.0.0
+      TT_API_PORT: 8000
+    volumes:
+      # Read-only: this service only ever reads history/status, never
+      # writes them -- `poller` is the sole writer of the shared volume.
+      - ${TT_DATA_DIR:-./data}:/app/data:ro
+    networks:
+      - ingress
+
+  # Sole reverse-proxy ingress into the api. Joins `ingress` to reach `api`
+  # and `public` for its own outbound route -- the latter exists only
+  # because the `tailscale` sidecar below shares this container's network
+  # namespace and needs it, not because Caddy itself calls out anywhere.
+  caddy:
+    # Pin by digest before this stack goes live.
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    read_only: true
+    # Non-root, same UID convention as the app containers. `caddy_data`/
+    # `caddy_config` must be chowned to this UID once before first use --
+    # the official image runs as root by default.
+    user: "1000:1000"
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - ingress
+      - public
+    depends_on:
+      - api
+
+  # Terminates the public reverse-tunnel connection into Caddy. Shares
+  # Caddy's network namespace (`network_mode`) instead of joining a network
+  # of its own, so it reaches Caddy over localhost and never gains any
+  # network membership beyond exactly what Caddy already has.
+  tailscale:
+    # Image only ships a `latest` tag; pin by digest before this stack
+    # goes live -- this one runs root + NET_ADMIN/NET_RAW on the host, the
+    # highest-risk image in the stack.
+    image: tailscale/tailscale:latest
+    restart: unless-stopped
+    network_mode: service:caddy
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+      - ./tailscale-entrypoint.sh:/entrypoint.sh:ro
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?TS_AUTHKEY must be set in deploy/.env}
+      TS_HOSTNAME: ${TS_HOSTNAME:-traffic-tracker}
+      TARGET_PORT: "8080"
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    depends_on:
+      - caddy
+
+networks:
+  internal:
+    internal: true
+  egress:
+    driver: bridge
+  # Internal-only (no NAT out) -- `api` only ever accepts inbound from
+  # `caddy` here, never initiates anything on it.
+  ingress:
+    internal: true
+  # The only network with a real outbound route among the ones this repo
+  # adds. Exists for the `tailscale` sidecar's own traffic (reaching the
+  # coordination service), inherited via `network_mode` on the `caddy`
+  # service it shares a namespace with.
+  public:
+    driver: bridge
+  # Not managed by this repo -- an already-running stack on the host owns
+  # this network's actual definition. Referenced here only so `poller` can
+  # join it; `external: true` means Compose must find it already created,
+  # never tries to create or own it itself. If the other stack's compose
+  # project directory or name ever changes, this network name (Compose's
+  # default naming: `<project-dir-name>_default`) would need updating to
+  # match -- confirm against the live host, don't assume.
+  monitoring:
+    external: true
+    name: monitoring_default
+
+volumes:
+  caddy_data:
+  caddy_config:
+  tailscale_state:

@@ -1,0 +1,38 @@
+# Sole ingress into the api service. Listens on plain HTTP on an
+# internal-only network -- TLS termination happens on the reverse-ingress
+# layer in front of this container, not here.
+{
+	auto_https off
+	admin off
+
+	# The tailscale sidecar shares this container's network namespace
+	# (compose's network_mode: service:caddy), so every real Funnel
+	# request arrives over loopback with X-Forwarded-For already set
+	# correctly by tailscaled. Trusting 127.0.0.1 here is safe because
+	# nothing but the sidecar can reach Caddy on loopback.
+	servers {
+		trusted_proxies static 127.0.0.1
+	}
+}
+
+:8080 {
+	encode gzip
+
+	# Security headers applied to every response, including 404s and the
+	# catch-all error handler. This is a GET-only JSON API, so
+	# default-src 'none' is the correct CSP. Cache-Control: no-store
+	# keeps responses from being cached stale. -Server strips
+	# version-fingerprinting from the response.
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Content-Security-Policy "default-src 'none'"
+		Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=()"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Cache-Control no-store
+		-Server
+	}
+
+	reverse_proxy api:8000
+}

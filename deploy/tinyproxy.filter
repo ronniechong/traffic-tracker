@@ -1,0 +1,7 @@
+# Allowlist ONLY these hosts. One host per line, matched as an FQDN
+# (see tinyproxy.conf: FilterExtended On).
+# 1. The upstream VIC open data freeway travel-time API.
+^api\.opendata\.transport\.vic\.gov\.au$
+# 2. The external dead-man's-switch ping target -- deliberate, narrow
+# widening, not the default upstream host.
+^hc-ping\.com$
