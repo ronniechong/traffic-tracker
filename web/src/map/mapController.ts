@@ -33,7 +33,7 @@ const DEFAULT_CONDITION_COLOR = CONDITION_COLORS.Blank
 
 // Segments beyond this substitution tier get the "estimated" dashed
 // treatment rather than reading as normal live data.
-const ESTIMATED_TIERS = new Set(['partially_interpolated', 'mostly_interpolated'])
+const ESTIMATED_TIERS = new Set(['partially_interpolated', 'majority_interpolated'])
 
 function isRenderable(segment: Segment): boolean {
   // `never_available` (and any other non-`available` status) means this
