@@ -19,7 +19,7 @@ Tracks freeway travel-time and congestion conditions across metropolitan Melbour
 | Containerization | Docker Compose, self-hosted | Full control over egress, non-root/read-only containers |
 | Storage | Day-partitioned SQLite (UTC day boundary), 90-day rolling local retention by unconditional file deletion | Simple single-writer relational storage; day boundaries also suit periodic archival export; retention deletion never depends on export status, so a stalled archiver can't silently block cleanup |
 | Eventing | Plain polling for v1; Service Worker + stale-while-revalidate planned as a frontend enhancement, with Periodic Background Sync as a progressive enhancement where supported | ~120s cadence doesn't justify a persistent connection (SSE) |
-| Frontend | Static site on GitHub Pages, MapLibre GL | Free hosting, no server-rendering needed |
+| Frontend | Static site on GitHub Pages, MapLibre GL, served from a custom domain apex rather than the default `github.io` path | Free hosting, no server-rendering needed |
 | Backend exposure | Tailscale Funnel | No public inbound ports on the host beyond controlled ingress |
 | Monitoring | Prometheus metrics endpoint + external dead-man's-switch pings | Detects both internal stalls and external reachability failures |
 
