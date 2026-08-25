@@ -1,0 +1,19 @@
+.mapContainer {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
+/* MapLibre appends its own .maplibregl-map element as a child of this div.
+   Absolute positioning against the .mapContainer containing block (rather
+   than percentage height/width) avoids a resize feedback loop through the
+   parent's own layout sizing. */
+.map {
+  position: absolute;
+  inset: 0;
+}
+
+.map :global(.maplibregl-map) {
+  height: 100%;
+  width: 100%;
+}

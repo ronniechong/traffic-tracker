@@ -22,6 +22,7 @@ Tracks freeway travel-time and congestion conditions across metropolitan Melbour
 | Frontend | Static site on GitHub Pages, MapLibre GL, served from a custom domain apex rather than the default `github.io` path | Free hosting, no server-rendering needed |
 | Backend exposure | Tailscale Funnel | No public inbound ports on the host beyond controlled ingress |
 | Monitoring | Prometheus metrics endpoint + external dead-man's-switch pings | Detects both internal stalls and external reachability failures |
+| Map rendering | MapLibre GL + OpenFreeMap (`liberty`/`dark` styles), condition-colored line layer over live segment geometry, no CityLink connector rendered | Free/keyless tile source; CityLink has no public data source at all, so there is no segment to render through the CBD rather than a styled placeholder standing in for missing data |
 
 ## Security invariants
 1. Exactly one upstream consumer. No code path may trigger a request to the upstream API from a user action — a single poller process is the only client.
