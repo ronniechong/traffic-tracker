@@ -69,15 +69,17 @@ services:
     depends_on:
       - egress-proxy
     networks:
-      - internal
+      internal: {}
       # Joins the host's already-existing general monitoring stack's
       # network so its Prometheus can scrape this container. No ports
       # are published to the host, so reachability is scoped entirely
-      # by network membership. Scraped by container name, not the
-      # Compose service-name alias -- another project on this same
-      # shared network also runs a service literally named `poller`,
-      # so that alias resolves ambiguously between the two containers.
-      - monitoring
+      # by network membership. Explicit project-qualified alias --
+      # another project on this same shared network also runs a
+      # service literally named `poller`, and Compose's default
+      # bare-service-name alias would collide between the two.
+      monitoring:
+        aliases:
+          - traffic-tracker-poller
 
   api:
     build:
