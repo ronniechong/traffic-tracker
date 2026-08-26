@@ -14,9 +14,10 @@ const OPENFREEMAP_STYLES: Record<Theme, string> = {
 const SEGMENTS_SOURCE_ID = 'freeway-segments'
 const SEGMENT_LINES_LAYER_ID = 'freeway-segment-lines'
 
-// Roughly centers metropolitan Melbourne's freeway network.
-const MELBOURNE_CENTER: [number, number] = [144.96, -37.85]
-const INITIAL_ZOOM = 10
+// Centers on the CBD for first load -- most freeway corridors converge
+// there, so it's a more useful starting view than the whole metro extent.
+const MELBOURNE_CENTER: [number, number] = [144.9631, -37.8136]
+const INITIAL_ZOOM = 12
 
 // A generous box around the 12 covered freeways' real extent (from South
 // Gippsland Fwy's southeast reach to the Western Ring Rd/Calder Fwy's

@@ -23,6 +23,10 @@ export function Legend() {
           Estimated (interpolated data)
         </li>
       </ul>
+      <p className={styles.legendNote}>
+        "Estimated" means the source reports this reading as partially or mostly interpolated rather than measured
+        directly from sensors — shown dashed so it reads as inferred, not broken.
+      </p>
     </div>
   )
 }

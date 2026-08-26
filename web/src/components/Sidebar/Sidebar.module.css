@@ -72,6 +72,87 @@
   flex-shrink: 0;
 }
 
+.legendNote {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin: 0.75rem 0 0;
+  line-height: 1.4;
+}
+
+.disclaimer {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin: 0 0 0.5rem;
+  line-height: 1.4;
+}
+
+.attribution {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.freewayList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.freewayRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 2rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggleTrack {
+  position: absolute;
+  inset: 0;
+  background: #d1d5db;
+  border-radius: 999px;
+  transition: background-color 0.15s ease;
+}
+
+.toggleTrack::before {
+  content: '';
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+}
+
+.toggle input:checked + .toggleTrack {
+  background: #22c55e;
+}
+
+.toggle input:checked + .toggleTrack::before {
+  transform: translateX(0.9rem);
+}
+
 .updatedAt {
   display: flex;
   align-items: center;
