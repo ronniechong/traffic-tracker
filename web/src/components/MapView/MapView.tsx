@@ -1,22 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import type * as maplibregl from 'maplibre-gl'
 import { addSegmentLayer, initMap, setMapStyle, setSegmentData, type Theme } from '../../map/mapController'
-import { fetchSegments, fetchStatus, isPollerHealthy } from '../../api'
 import type { Segment } from '../../api-types'
 import { LoadingOverlay } from '../LoadingOverlay'
 import styles from './MapView.module.css'
 
-const POLL_INTERVAL_MS = 30_000
-
 interface MapViewProps {
   theme: Theme
+  segments: Segment[] | null
+  /** The map's own initial-load state (basemap/style ready), not the data
+   * poll's -- kept separate from `App`'s data-loading state so the map
+   * shows itself as soon as it can render, even before the first poll
+   * response arrives. */
+  onMapReady?: () => void
 }
 
-export function MapView({ theme }: MapViewProps) {
+export function MapView({ theme, segments, onMapReady }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
-  const lastSegmentsRef = useRef<Segment[] | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const segmentsRef = useRef<Segment[] | null>(segments)
+  const [isMapLoading, setIsMapLoading] = useState(true)
 
   useEffect(() => {
     const container = containerRef.current
@@ -25,38 +28,14 @@ export function MapView({ theme }: MapViewProps) {
     const map = initMap(container, theme)
     mapRef.current = map
 
-    let cancelled = false
-    let pollTimer: ReturnType<typeof setTimeout> | undefined
-
-    async function loadOnce() {
-      const [status, segments] = await Promise.all([fetchStatus(), fetchSegments()])
-      if (cancelled) return
-      // A degraded poller or a failed/timed-out/non-2xx fetch all collapse
-      // to the same outcome: don't populate new data. No banner, no retry
-      // indicator -- the map just keeps whatever it already has (or the
-      // bare basemap, on first load).
-      if (isPollerHealthy(status) && segments) {
-        lastSegmentsRef.current = segments
-        setSegmentData(map, segments)
-      }
-    }
-
-    async function pollLoop() {
-      await loadOnce()
-      if (cancelled) return
-      pollTimer = setTimeout(pollLoop, POLL_INTERVAL_MS)
-    }
-
     map.on('load', () => {
       addSegmentLayer(map)
-      void pollLoop().finally(() => {
-        if (!cancelled) setIsLoading(false)
-      })
+      if (segmentsRef.current) setSegmentData(map, segmentsRef.current)
+      setIsMapLoading(false)
+      onMapReady?.()
     })
 
     return () => {
-      cancelled = true
-      if (pollTimer) clearTimeout(pollTimer)
       map.remove()
       mapRef.current = null
     }
@@ -64,6 +43,13 @@ export function MapView({ theme }: MapViewProps) {
     // this one would tear down and rebuild the whole map unnecessarily.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    segmentsRef.current = segments
+    const map = mapRef.current
+    if (!map || !segments) return
+    setSegmentData(map, segments)
+  }, [segments])
 
   useEffect(() => {
     const map = mapRef.current
@@ -74,14 +60,14 @@ export function MapView({ theme }: MapViewProps) {
     // the next poll cycle.
     setMapStyle(map, theme, () => {
       addSegmentLayer(map)
-      if (lastSegmentsRef.current) setSegmentData(map, lastSegmentsRef.current)
+      if (segmentsRef.current) setSegmentData(map, segmentsRef.current)
     })
   }, [theme])
 
   return (
     <div className={styles.mapContainer}>
       <div ref={containerRef} className={styles.map} />
-      {isLoading && <LoadingOverlay />}
+      {isMapLoading && <LoadingOverlay />}
     </div>
   )
 }

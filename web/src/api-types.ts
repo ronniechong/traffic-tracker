@@ -3,7 +3,7 @@ export type Condition = 'Blank' | 'Light' | 'Medium' | 'Heavy'
 // Coarser than the API's raw 0-1 fraction -- the map only needs to decide
 // "does this segment get the estimated-data treatment," not the exact
 // interpolation percentage.
-export type DataSubstitutionTier = 'measured' | 'partially_interpolated' | 'mostly_interpolated' | string
+export type DataSubstitutionTier = 'measured' | 'partially_interpolated' | 'majority_interpolated' | string
 
 export type GeometryStatus = 'available' | 'never_available' | string
 

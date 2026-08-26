@@ -18,6 +18,16 @@ const SEGMENT_LINES_LAYER_ID = 'freeway-segment-lines'
 const MELBOURNE_CENTER: [number, number] = [144.96, -37.85]
 const INITIAL_ZOOM = 10
 
+// A generous box around the 12 covered freeways' real extent (from South
+// Gippsland Fwy's southeast reach to the Western Ring Rd/Calder Fwy's
+// northwest edge) -- keeps panning within the coverage area instead of
+// letting the map wander to unrelated parts of the country. Deliberately
+// loose, not a tight crop to each freeway's exact bounding box.
+const COVERAGE_BOUNDS: maplibregl.LngLatBoundsLike = [
+  [144.3, -38.35],
+  [145.9, -37.55],
+]
+
 // Condition colors, kept out of the orange/red-only trap: Light is green
 // (not the confusable red/green pairing on its own -- Medium's orange and
 // Heavy's red are still distinguishable from Light by lightness/hue, not
@@ -68,6 +78,7 @@ export function initMap(container: HTMLElement, theme: Theme): maplibregl.Map {
     center: MELBOURNE_CENTER,
     zoom: INITIAL_ZOOM,
     minZoom: 8,
+    maxBounds: COVERAGE_BOUNDS,
     attributionControl: { compact: true },
   }).addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
 }
