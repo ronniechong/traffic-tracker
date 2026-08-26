@@ -22,7 +22,7 @@ from slowapi.util import get_remote_address
 from traffictracker import quality
 from traffictracker.api.schemas import ErrorDetail, ErrorResponse, SegmentReading, StatusResponse
 from traffictracker.status_store import DEFAULT_STATUS_DB_PATH, StatusStore
-from traffictracker.storage import DEFAULT_DATA_DIR, read_current_segments
+from traffictracker.storage import DEFAULT_DATA_DIR, find_blank_since, read_current_segments
 
 FRONTEND_ORIGIN_ENV = "FRONTEND_ORIGIN"
 DEFAULT_FRONTEND_ORIGIN = "https://example-placeholder.invalid"
@@ -77,8 +77,18 @@ def create_app(
         # this row" -- a reading served minutes after being written should
         # be able to go stale between polls, not just at write time.
         published = datetime.fromisoformat(reading.published_time_utc)
-        is_stale = quality.is_stale(published, now=datetime.now(timezone.utc))
+        now = datetime.now(timezone.utc)
+        is_stale = quality.is_stale(published, now=now)
         tier = quality.substitution_tier(reading.data_substitution)
+
+        # Only Blank segments need a history walk -- the vast majority of
+        # segments never pay this cost.
+        blank_since = None
+        persistent_blank = False
+        if reading.condition == "Blank":
+            blank_since = find_blank_since(reading.segment_id, before=published, data_dir=data_dir)
+            persistent_blank = quality.is_persistent_blank(blank_since, now=now)
+
         return SegmentReading(
             segment_id=reading.segment_id,
             freeway_name=reading.freeway_name,
@@ -92,6 +102,8 @@ def create_app(
             geometry_status=reading.geometry_status,
             geometry=reading.geometry,
             has_override=reading.has_override,
+            blank_since_utc=blank_since.isoformat() if blank_since else None,
+            persistent_blank=persistent_blank,
         )
 
     @app.get("/v1/segments", response_model=list[SegmentReading])

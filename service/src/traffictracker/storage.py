@@ -271,3 +271,52 @@ def read_current_segments(
         replace(r, geometry=geometry_by_segment.get(r.segment_id))
         for r in latest_by_segment.values()
     ]
+
+
+def find_blank_since(
+    segment_id: str,
+    before: datetime,
+    data_dir: Path = DEFAULT_DATA_DIR,
+    max_lookback_days: int = 90,
+) -> datetime | None:
+    """Walks a segment's stored history backward from `before`, one day
+    partition at a time, to find the start of its current continuous
+    `Blank` streak.
+
+    Stops at the first non-Blank reading, or at the first day with no
+    partition file or no rows for the segment -- a missing partition means
+    continuity can't be confirmed further back, so the streak is reported
+    from the earliest point that's actually verifiable rather than assumed
+    to extend into unrecorded history.
+    """
+    earliest: str | None = None
+    for offset in range(max_lookback_days):
+        day = before.date() - timedelta(days=offset)
+        conn = _open_readonly(partition_path(day, data_dir))
+        if conn is None:
+            break
+        try:
+            rows = conn.execute(
+                """
+                SELECT condition, published_time_utc FROM segment_readings
+                WHERE segment_id = ? AND published_time_utc <= ?
+                ORDER BY published_time_utc DESC
+                """,
+                (segment_id, before.isoformat()),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        if not rows:
+            break
+
+        reached_non_blank = False
+        for condition, published_time_utc in rows:
+            if condition != "Blank":
+                reached_non_blank = True
+                break
+            earliest = published_time_utc
+        if reached_non_blank:
+            break
+
+    return datetime.fromisoformat(earliest) if earliest is not None else None

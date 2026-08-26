@@ -20,6 +20,8 @@ class SegmentReading(BaseModel):
     geometry_status: str
     geometry: dict[str, Any] | None
     has_override: bool
+    blank_since_utc: str | None
+    persistent_blank: bool
 
 
 class StatusResponse(BaseModel):

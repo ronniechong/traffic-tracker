@@ -68,6 +68,8 @@ def test_list_segments_happy_path(tmp_path):
     assert len(body) == 1
     assert body[0]["segment_id"] == "S1"
     assert body[0]["geometry"] == {"type": "Point", "coordinates": [1, 2]}
+    assert body[0]["blank_since_utc"] is None
+    assert body[0]["persistent_blank"] is False
 
 
 def test_get_segment_happy_path(tmp_path):
@@ -169,6 +171,40 @@ def test_geometry_status_round_trips_non_available_value(tmp_path):
 
     response = client.get("/v1/segments/S1")
     assert response.json()["geometry_status"] == GeometryStatus.NEVER_AVAILABLE.value
+
+
+def test_blank_since_and_persistent_blank_reflect_continuous_history(tmp_path):
+    client, data_dir, _ = _make_client(tmp_path)
+    store = HistoryStore(data_dir=data_dir)
+    blank_start = NOW - timedelta(hours=3)
+    store.write_records(
+        [_record(segment_id="S1", published_time_utc=blank_start, condition="Blank")],
+        polled_at_utc=blank_start,
+    )
+    store.write_records(
+        [_record(segment_id="S1", published_time_utc=NOW, condition="Blank")],
+        polled_at_utc=NOW,
+    )
+    store.close()
+
+    response = client.get("/v1/segments/S1")
+    body = response.json()
+    assert body["blank_since_utc"] == blank_start.isoformat()
+    assert body["persistent_blank"] is True
+
+
+def test_transient_blank_is_not_persistent(tmp_path):
+    client, data_dir, _ = _make_client(tmp_path)
+    store = HistoryStore(data_dir=data_dir)
+    store.write_records(
+        [_record(segment_id="S1", published_time_utc=NOW, condition="Blank")], polled_at_utc=NOW
+    )
+    store.close()
+
+    response = client.get("/v1/segments/S1")
+    body = response.json()
+    assert body["blank_since_utc"] == NOW.isoformat()
+    assert body["persistent_blank"] is False
 
 
 def test_status_ok_when_circuit_not_tripped(tmp_path):

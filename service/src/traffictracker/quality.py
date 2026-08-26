@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 STALENESS_THRESHOLD_SECONDS = 240  # 2x the measured ~120s cadence
+PERSISTENT_BLANK_THRESHOLD_SECONDS = 7200  # 2 hours of continuous Blank
 
 
 class SubstitutionTier(str, Enum):
@@ -44,3 +45,20 @@ def is_stale(
     reference = now or datetime.now(timezone.utc)
     age = (reference - published_time_utc).total_seconds()
     return age > threshold_seconds
+
+
+def is_persistent_blank(
+    blank_since_utc: datetime | None,
+    now: datetime | None = None,
+    threshold_seconds: int = PERSISTENT_BLANK_THRESHOLD_SECONDS,
+) -> bool:
+    """A segment is "persistently" Blank once its continuous Blank streak
+    (as tracked in stored history, not a poll count) has lasted at least
+    the threshold. `blank_since_utc` of `None` means no continuous streak
+    could be established (e.g. no prior history), so it is never
+    persistent."""
+    if blank_since_utc is None:
+        return False
+    reference = now or datetime.now(timezone.utc)
+    age = (reference - blank_since_utc).total_seconds()
+    return age >= threshold_seconds

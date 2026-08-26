@@ -42,6 +42,11 @@ const CONDITION_COLORS: Record<string, string> = {
 }
 const DEFAULT_CONDITION_COLOR = CONDITION_COLORS.Blank
 
+// A visibly darker grey than transient Blank -- a segment with no data
+// right now reads differently from one with no data for hours, even
+// though both carry no condition signal to color by.
+const PERSISTENT_BLANK_COLOR = '#4b5563'
+
 // Segments beyond this substitution tier get the "estimated" dashed
 // treatment rather than reading as normal live data.
 const ESTIMATED_TIERS = new Set(['partially_interpolated', 'majority_interpolated'])
@@ -65,6 +70,7 @@ export function segmentsToGeoJSON(segments: Segment[]): GeoJSON.FeatureCollectio
           id: segment.segment_id,
           condition: segment.condition,
           estimated: ESTIMATED_TIERS.has(segment.data_substitution_tier),
+          persistentBlank: segment.persistent_blank,
         },
         // isRenderable already checked non-null.
         geometry: segment.geometry as GeoJSON.LineString,
@@ -99,17 +105,22 @@ export function addSegmentLayer(map: maplibregl.Map): void {
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: {
       'line-color': [
-        'match',
-        ['get', 'condition'],
-        'Light',
-        CONDITION_COLORS.Light,
-        'Medium',
-        CONDITION_COLORS.Medium,
-        'Heavy',
-        CONDITION_COLORS.Heavy,
-        'Blank',
-        CONDITION_COLORS.Blank,
-        DEFAULT_CONDITION_COLOR,
+        'case',
+        ['get', 'persistentBlank'],
+        PERSISTENT_BLANK_COLOR,
+        [
+          'match',
+          ['get', 'condition'],
+          'Light',
+          CONDITION_COLORS.Light,
+          'Medium',
+          CONDITION_COLORS.Medium,
+          'Heavy',
+          CONDITION_COLORS.Heavy,
+          'Blank',
+          CONDITION_COLORS.Blank,
+          DEFAULT_CONDITION_COLOR,
+        ],
       ],
       // Estimated segments render lower-opacity and dashed so they read as
       // "the data behind this is inferred," not as a rendering glitch.

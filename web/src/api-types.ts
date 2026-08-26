@@ -20,6 +20,8 @@ export interface Segment {
   geometry_status: GeometryStatus
   geometry: GeoJSON.LineString | null
   has_override: boolean
+  blank_since_utc: string | null
+  persistent_blank: boolean
 }
 
 export interface StatusResponse {

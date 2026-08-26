@@ -1,22 +1,33 @@
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from traffictracker.geometry_cache import GeometryStatus
 from traffictracker.models import SegmentRecord
 from traffictracker.quality import SubstitutionTier
-from traffictracker.storage import HistoryStore, partition_path, prune_partitions_older_than
+from traffictracker.storage import (
+    HistoryStore,
+    find_blank_since,
+    partition_path,
+    prune_partitions_older_than,
+)
 
 
-def _record(segment_id="S1", data_substitution=None, geometry=None) -> SegmentRecord:
+def _record(
+    segment_id="S1",
+    data_substitution=None,
+    geometry=None,
+    condition="Light",
+    published_time_utc=None,
+) -> SegmentRecord:
     return SegmentRecord(
         segment_id=segment_id,
         freeway_name="Monash Fwy",
         segment_name="Example Segment",
         direction="Inbound",
-        condition="Light",
+        condition=condition,
         data_substitution=data_substitution,
         substitution_tier=SubstitutionTier.MEASURED,
-        published_time_utc=datetime(2026, 8, 20, 7, 3, 0, tzinfo=timezone.utc),
+        published_time_utc=published_time_utc or datetime(2026, 8, 20, 7, 3, 0, tzinfo=timezone.utc),
         stale=False,
         geometry=geometry,
         geometry_status=GeometryStatus.AVAILABLE if geometry else GeometryStatus.PENDING,
@@ -111,3 +122,59 @@ def test_prune_partitions_older_than_deletes_only_stale_files(tmp_path):
     remaining = {p.name for p in tmp_path.glob("*.sqlite3")}
     assert {p.name for p in deleted} == {"2026-06-01.sqlite3"}
     assert remaining == {"2026-07-01.sqlite3", "2026-08-19.sqlite3", "2026-08-20.sqlite3"}
+
+
+def test_find_blank_since_stops_at_first_non_blank_reading(tmp_path):
+    store = HistoryStore(data_dir=tmp_path)
+    base = datetime(2026, 8, 20, 10, 0, 0, tzinfo=timezone.utc)
+    readings = [
+        (base, "Light"),
+        (base + timedelta(minutes=2), "Blank"),
+        (base + timedelta(minutes=4), "Blank"),
+        (base + timedelta(minutes=6), "Blank"),
+    ]
+    for published_time_utc, condition in readings:
+        store.write_records(
+            [_record(published_time_utc=published_time_utc, condition=condition)],
+            polled_at_utc=published_time_utc,
+        )
+    store.close()
+
+    since = find_blank_since("S1", before=readings[-1][0], data_dir=tmp_path)
+    assert since == readings[1][0]
+
+
+def test_find_blank_since_walks_back_across_day_partitions(tmp_path):
+    store = HistoryStore(data_dir=tmp_path)
+    day_one_start = datetime(2026, 8, 19, 23, 0, 0, tzinfo=timezone.utc)
+    day_two_reading = datetime(2026, 8, 20, 1, 0, 0, tzinfo=timezone.utc)
+
+    store.write_records(
+        [_record(published_time_utc=day_one_start, condition="Blank")],
+        polled_at_utc=day_one_start,
+    )
+    store.write_records(
+        [_record(published_time_utc=day_two_reading, condition="Blank")],
+        polled_at_utc=day_two_reading,
+    )
+    store.close()
+
+    since = find_blank_since("S1", before=day_two_reading, data_dir=tmp_path)
+    assert since == day_one_start
+
+
+def test_find_blank_since_none_when_no_history(tmp_path):
+    since = find_blank_since("unknown", before=datetime(2026, 8, 20, tzinfo=timezone.utc), data_dir=tmp_path)
+    assert since is None
+
+
+def test_find_blank_since_none_when_latest_is_not_blank(tmp_path):
+    store = HistoryStore(data_dir=tmp_path)
+    published = datetime(2026, 8, 20, 10, 0, 0, tzinfo=timezone.utc)
+    store.write_records(
+        [_record(published_time_utc=published, condition="Light")], polled_at_utc=published
+    )
+    store.close()
+
+    since = find_blank_since("S1", before=published, data_dir=tmp_path)
+    assert since is None

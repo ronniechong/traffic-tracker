@@ -5,6 +5,7 @@ const CONDITION_ROWS: Array<{ label: string; color: string }> = [
   { label: 'Medium', color: '#f97316' },
   { label: 'Heavy', color: '#dc2626' },
   { label: 'No data', color: '#9ca3af' },
+  { label: 'No data (2+ hours)', color: '#4b5563' },
 ]
 
 export function Legend() {
@@ -26,6 +27,10 @@ export function Legend() {
       <p className={styles.legendNote}>
         "Estimated" means the source reports this reading as partially or mostly interpolated rather than measured
         directly from sensors — shown dashed so it reads as inferred, not broken.
+      </p>
+      <p className={styles.legendNote}>
+        A darker "no data" shade means this segment has reported no data continuously for at least 2 hours, not just
+        a single missed reading.
       </p>
     </div>
   )
