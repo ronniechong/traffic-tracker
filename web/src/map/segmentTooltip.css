@@ -29,6 +29,12 @@
   font-weight: 600;
 }
 
+.segment-tooltip__divider {
+  margin: 0.6rem 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
 .segment-tooltip__direction-row {
   margin-top: 0.6rem;
   padding-top: 0.5rem;

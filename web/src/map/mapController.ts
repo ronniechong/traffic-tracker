@@ -153,12 +153,30 @@ export function setMapStyle(map: maplibregl.Map, theme: Theme, onReady: () => vo
 /** Returns the `segment_id` of the segment nearest a click point, or
  * `undefined` if the click didn't land on (or near) a rendered segment. */
 export function querySegmentIdAtPoint(map: maplibregl.Map, point: maplibregl.PointLike): string | undefined {
+  return querySegmentIdsAtPoint(map, point)[0]
+}
+
+/** Returns every distinct `segment_id` within the click hit-test buffer,
+ * nearest first. Opposite-direction carriageways render as separate,
+ * closely-parallel lines with unrelated `segment_name` strings (VicRoads
+ * doesn't name direction pairs symmetrically -- "A to B" vs. a differently
+ * worded reverse, not a matching "B to A"), so proximity is the only
+ * reliable way to find both directions of the same click. */
+export function querySegmentIdsAtPoint(map: maplibregl.Map, point: maplibregl.PointLike): string[] {
   const { x, y } = point as { x: number; y: number }
   const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
     [x - CLICK_HIT_RADIUS_PX, y - CLICK_HIT_RADIUS_PX],
     [x + CLICK_HIT_RADIUS_PX, y + CLICK_HIT_RADIUS_PX],
   ]
   const features = map.queryRenderedFeatures(bbox, { layers: [SEGMENT_LINES_LAYER_ID] })
-  const id = features[0]?.properties?.id
-  return typeof id === 'string' ? id : undefined
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const feature of features) {
+    const id = feature.properties?.id
+    if (typeof id === 'string' && !seen.has(id)) {
+      seen.add(id)
+      ids.push(id)
+    }
+  }
+  return ids
 }

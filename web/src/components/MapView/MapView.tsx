@@ -3,13 +3,13 @@ import * as maplibregl from 'maplibre-gl'
 import {
   addSegmentLayer,
   initMap,
-  querySegmentIdAtPoint,
+  querySegmentIdsAtPoint,
   SEGMENT_LINES_LAYER_ID,
   setMapStyle,
   setSegmentData,
   type Theme,
 } from '../../map/mapController'
-import { groupKeyFor, renderSegmentTooltipHtml, SEGMENT_TOOLTIP_CLASS } from '../../map/segmentTooltip'
+import { renderSegmentTooltipHtml, SEGMENT_TOOLTIP_CLASS } from '../../map/segmentTooltip'
 import '../../map/segmentTooltip.css'
 import type { Segment } from '../../api-types'
 import { LoadingOverlay } from '../LoadingOverlay'
@@ -32,14 +32,15 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
   const popupRef = useRef<maplibregl.Popup | null>(null)
   const selectedLngLatRef = useRef<maplibregl.LngLat | null>(null)
   const [isMapLoading, setIsMapLoading] = useState(true)
-  // The clicked segment's group key (freeway + segment name), not the
-  // segment object itself -- content is re-derived from the latest
-  // `segments` prop on every poll so the tooltip stays live rather than
-  // freezing at click-time data. Grouped (not per-segment-id) so both
-  // directions of the same stretch show together -- their lines render
-  // close enough together that clicking precisely on just one is
-  // impractical at this scale.
-  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null)
+  // The segment IDs within the click hit-test buffer, not the segment
+  // objects themselves -- content is re-derived from the latest `segments`
+  // prop on every poll so the tooltip stays live rather than freezing at
+  // click-time data. All IDs at the click point (not just the nearest) so
+  // both directions of the same stretch show together -- their lines
+  // render close enough together that clicking precisely on just one is
+  // impractical at this scale, and segment names don't pair predictably
+  // between directions.
+  const [selectedSegmentIds, setSelectedSegmentIds] = useState<string[]>([])
 
   useEffect(() => {
     const container = containerRef.current
@@ -52,7 +53,7 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
       className: SEGMENT_TOOLTIP_CLASS,
       maxWidth: '260px',
     })
-    popup.on('close', () => setSelectedGroupKey(null))
+    popup.on('close', () => setSelectedSegmentIds([]))
     popupRef.current = popup
 
     map.on('load', () => {
@@ -63,19 +64,16 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
     })
 
     map.on('click', (e) => {
-      const id = querySegmentIdAtPoint(map, e.point)
-      if (!id) {
-        setSelectedGroupKey(null)
-        return
-      }
-      const segment = segmentsRef.current?.find((s) => s.segment_id === id)
-      if (!segment) {
-        setSelectedGroupKey(null)
+      const ids = querySegmentIdsAtPoint(map, e.point)
+      if (ids.length === 0) {
+        setSelectedSegmentIds([])
         return
       }
       selectedLngLatRef.current = e.lngLat
-      const key = groupKeyFor(segment)
-      setSelectedGroupKey((prev) => (prev === key ? null : key))
+      setSelectedSegmentIds((prev) => {
+        const same = prev.length === ids.length && prev.every((id) => ids.includes(id))
+        return same ? [] : ids
+      })
     })
 
     map.on('mouseenter', SEGMENT_LINES_LAYER_ID, () => {
@@ -107,7 +105,7 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
     const popup = popupRef.current
     if (!map || !popup) return
 
-    if (!selectedGroupKey) {
+    if (selectedSegmentIds.length === 0) {
       popup.remove()
       return
     }
@@ -115,16 +113,16 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
     // Empty covers both "no longer in the poll response" and "hidden by a
     // freeway toggle" -- both should dismiss rather than show stale or
     // orphaned content.
-    const group = segments?.filter((s) => groupKeyFor(s) === selectedGroupKey) ?? []
+    const group = segments?.filter((s) => selectedSegmentIds.includes(s.segment_id)) ?? []
     if (group.length === 0 || !selectedLngLatRef.current) {
       popup.remove()
-      setSelectedGroupKey(null)
+      setSelectedSegmentIds([])
       return
     }
 
     popup.setLngLat(selectedLngLatRef.current).setHTML(renderSegmentTooltipHtml(group))
     if (!popup.isOpen()) popup.addTo(map)
-  }, [segments, selectedGroupKey])
+  }, [segments, selectedSegmentIds])
 
   useEffect(() => {
     const map = mapRef.current

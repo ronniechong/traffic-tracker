@@ -40,13 +40,6 @@ function dataQualityNote(segment: Segment): string | null {
   return null
 }
 
-/** Groups segments so both directions of the same stretch (which render as
- * separate, closely-parallel lines) show together in one tooltip -- clicking
- * precisely on just one direction's thin line is impractical at this scale. */
-export function groupKeyFor(segment: Segment): string {
-  return `${segment.freeway_name}::${segment.segment_name}`
-}
-
 function renderDirectionRow(segment: Segment): string {
   const dotColor = segment.persistent_blank ? '#4b5563' : (CONDITION_COLORS[segment.condition] ?? CONDITION_COLORS.Blank)
   const note = dataQualityNote(segment)
@@ -63,13 +56,35 @@ function renderDirectionRow(segment: Segment): string {
   `
 }
 
-export function renderSegmentTooltipHtml(segments: Segment[]): string {
-  const [first] = segments
+function renderNamedGroup(freewayName: string, segmentName: string, segments: Segment[]): string {
   return `
-    <div class="${SEGMENT_TOOLTIP_CLASS}__body">
-      <p class="${SEGMENT_TOOLTIP_CLASS}__freeway">${escapeHtml(freewayDisplayName(first.freeway_name))}</p>
-      <p class="${SEGMENT_TOOLTIP_CLASS}__segment">${escapeHtml(first.segment_name)}</p>
+    <div class="${SEGMENT_TOOLTIP_CLASS}__named-group">
+      <p class="${SEGMENT_TOOLTIP_CLASS}__freeway">${escapeHtml(freewayDisplayName(freewayName))}</p>
+      <p class="${SEGMENT_TOOLTIP_CLASS}__segment">${escapeHtml(segmentName)}</p>
       ${segments.map(renderDirectionRow).join('')}
     </div>
   `
+}
+
+/** Segments passed in are whatever fell within the click hit-test buffer --
+ * usually both directions of the same stretch, but proximity alone can't
+ * guarantee that, so segments are grouped by their own freeway+name rather
+ * than assumed to share one. */
+export function renderSegmentTooltipHtml(segments: Segment[]): string {
+  const groups = new Map<string, { freewayName: string; segmentName: string; segments: Segment[] }>()
+  for (const segment of segments) {
+    const key = `${segment.freeway_name}::${segment.segment_name}`
+    const group = groups.get(key)
+    if (group) {
+      group.segments.push(segment)
+    } else {
+      groups.set(key, { freewayName: segment.freeway_name, segmentName: segment.segment_name, segments: [segment] })
+    }
+  }
+
+  const body = [...groups.values()]
+    .map((g) => renderNamedGroup(g.freewayName, g.segmentName, g.segments))
+    .join(`<hr class="${SEGMENT_TOOLTIP_CLASS}__divider" />`)
+
+  return `<div class="${SEGMENT_TOOLTIP_CLASS}__body">${body}</div>`
 }
