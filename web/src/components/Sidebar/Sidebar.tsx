@@ -33,6 +33,10 @@ export function Sidebar({ status, isPolling, freeways, hiddenFreeways, onToggleF
           VicRoads or your GPS navigation app.
         </p>
         <p className={styles.attribution}>Data: VIC open data portal's Freeway Travel Time API (VicRoads).</p>
+        <p className={styles.attribution}>
+          Light/Medium/Heavy conditions are classified by VicRoads (the same labels shown on their freeway signs) —
+          the exact thresholds behind each label aren't published.
+        </p>
       </div>
     </aside>
   )
