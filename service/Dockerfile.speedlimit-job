@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1
+#
+# Speed-limit reference job -- its own image, deliberately separate from
+# Dockerfile's poller/api image. Pulls in shapely/GEOS and ijson, which
+# the always-on poller has no need for; keeping them here means that
+# minimal, continuously-running image's footprint never grows for a
+# once-a-month batch job.
+
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev --group job
+
+COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --group job
+
+FROM python:3.12-slim-bookworm AS runtime
+
+RUN groupadd --system app && useradd --system --gid app --home-dir /app --no-create-home app
+
+WORKDIR /app
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --from=builder --chown=app:app /app/src /app/src
+
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+USER app
+
+# storage.py derives its data path from the installed src layout, which
+# resolves under this WORKDIR to /app/data -- read-only for this job
+# (it only reads current segments, never writes readings). The reference
+# DB's directory is the one writable mount this job needs.
+VOLUME ["/app/data", "/app/data/reference"]
+
+ENTRYPOINT ["python", "-m", "traffictracker.speedlimit_job"]

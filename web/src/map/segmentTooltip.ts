@@ -40,6 +40,26 @@ function dataQualityNote(segment: Segment): string | null {
   return null
 }
 
+/** No line at all when there's no reference-table row for this segment
+ * (zero-match or no-geometry) -- never a placeholder implying a value
+ * was looked up and failed. */
+function renderSpeedLimitLine(segment: Segment): string {
+  if (segment.speed_limit_kmh == null) return ''
+
+  const uncertain = segment.speed_limit_confident === false
+  const label = uncertain
+    ? `Speed limit: ~${segment.speed_limit_kmh} km/h (uncertain)`
+    : `Speed limit: ${segment.speed_limit_kmh} km/h`
+  const disclaimer = uncertain
+    ? 'VicRoads speed-zone data, monthly-refreshed, not live. Multiple overlapping zones near this segment -- limit shown is the best match, not certain.'
+    : 'VicRoads speed-zone data, monthly-refreshed, not live.'
+
+  return `
+    <p class="${SEGMENT_TOOLTIP_CLASS}__speed-limit">${escapeHtml(label)}</p>
+    <p class="${SEGMENT_TOOLTIP_CLASS}__note">${escapeHtml(disclaimer)}</p>
+  `
+}
+
 function renderDirectionRow(segment: Segment): string {
   const dotColor = segment.persistent_blank ? '#4b5563' : (CONDITION_COLORS[segment.condition] ?? CONDITION_COLORS.Blank)
   const note = dataQualityNote(segment)
@@ -52,6 +72,7 @@ function renderDirectionRow(segment: Segment): string {
         ${escapeHtml(conditionLabel(segment))}
       </p>
       ${note ? `<p class="${SEGMENT_TOOLTIP_CLASS}__note">${escapeHtml(note)}</p>` : ''}
+      ${renderSpeedLimitLine(segment)}
     </div>
   `
 }

@@ -81,6 +81,35 @@ services:
         aliases:
           - traffic-tracker-poller
 
+  # One-shot monthly job, not part of `docker compose up` -- excluded from
+  # the default set by its profile and invoked explicitly via host cron:
+  # `docker compose --profile jobs run --rm speedlimit-job`. Same
+  # egress-isolation shape as `poller` (internal network + egress-proxy
+  # only), but its own image (see Dockerfile.speedlimit-job) so the
+  # shapely/GEOS/ijson dependency footprint never lands in the
+  # continuously-running poller image.
+  speedlimit-job:
+    profiles: ["jobs"]
+    build:
+      context: ../service
+      dockerfile: Dockerfile.speedlimit-job
+    restart: "no"
+    read_only: true
+    user: "1000:1000"
+    tmpfs:
+      - /tmp
+    environment:
+      TT_SPEEDLIMIT_DEADMAN_PING_URL: ${TT_SPEEDLIMIT_DEADMAN_PING_URL:-}
+      HTTP_PROXY: http://egress-proxy:8888
+      HTTPS_PROXY: http://egress-proxy:8888
+      NO_PROXY: "localhost,127.0.0.1"
+    volumes:
+      - ${TT_DATA_DIR:-./data}:/app/data
+    depends_on:
+      - egress-proxy
+    networks:
+      - internal
+
   api:
     build:
       context: ../service
@@ -102,7 +131,9 @@ services:
       TT_API_PORT: 8000
     volumes:
       # Read-only: this service only ever reads history/status, never
-      # writes them -- `poller` is the sole writer of the shared volume.
+      # writes them -- `poller` is the sole writer of the shared volume,
+      # and the speedlimit-job below is the sole writer of the reference
+      # file joined in at /app/data/reference.
       - ${TT_DATA_DIR:-./data}:/app/data:ro
     networks:
       - ingress

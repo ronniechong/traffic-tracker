@@ -5,3 +5,6 @@
 # 2. The external dead-man's-switch ping target -- deliberate, narrow
 # widening, not the default upstream host.
 ^hc-ping\.com$
+# 3. The Speed Zones dataset host, used only by the monthly speedlimit-job
+# (not the always-on poller) -- a different host to the freeway API above.
+^opendata\.transport\.vic\.gov\.au$

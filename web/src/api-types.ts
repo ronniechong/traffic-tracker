@@ -22,6 +22,9 @@ export interface Segment {
   has_override: boolean
   blank_since_utc: string | null
   persistent_blank: boolean
+  speed_limit_kmh: number | null
+  speed_limit_confident: boolean | null
+  speed_limit_computed_at_utc: string | null
 }
 
 export interface StatusResponse {

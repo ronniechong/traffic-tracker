@@ -21,6 +21,8 @@ from slowapi.util import get_remote_address
 
 from traffictracker import quality
 from traffictracker.api.schemas import ErrorDetail, ErrorResponse, SegmentReading, StatusResponse
+from traffictracker.speed_limits import DEFAULT_DB_PATH as DEFAULT_SPEED_LIMITS_DB_PATH
+from traffictracker.speed_limits import read_all as read_speed_limits
 from traffictracker.status_store import DEFAULT_STATUS_DB_PATH, StatusStore
 from traffictracker.storage import DEFAULT_DATA_DIR, find_blank_since, read_current_segments
 
@@ -40,6 +42,7 @@ def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
 def create_app(
     data_dir: Path = DEFAULT_DATA_DIR,
     status_db_path: Path = DEFAULT_STATUS_DB_PATH,
+    speed_limits_db_path: Path = DEFAULT_SPEED_LIMITS_DB_PATH,
     frontend_origin: str | None = None,
     rate_limit: str = RATE_LIMIT,
 ) -> FastAPI:
@@ -71,7 +74,7 @@ def create_app(
     ) -> JSONResponse:
         return _error_response(422, "invalid_request", "request validation failed")
 
-    def _to_segment_reading(reading) -> SegmentReading:
+    def _to_segment_reading(reading, speed_limits: dict) -> SegmentReading:
         # Recomputed at query time (not read from the stored `stale` column)
         # so staleness reflects "as of now", not "as of the poll that wrote
         # this row" -- a reading served minutes after being written should
@@ -104,21 +107,35 @@ def create_app(
             has_override=reading.has_override,
             blank_since_utc=blank_since.isoformat() if blank_since else None,
             persistent_blank=persistent_blank,
+            # No reference-table row (zero-match or no-geometry segments)
+            # omits the speed-limit line entirely -- never a placeholder
+            # implying a value was attempted and failed.
+            speed_limit_kmh=speed_limits[reading.segment_id].speed_limit_kmh
+            if reading.segment_id in speed_limits
+            else None,
+            speed_limit_confident=speed_limits[reading.segment_id].confident
+            if reading.segment_id in speed_limits
+            else None,
+            speed_limit_computed_at_utc=speed_limits[reading.segment_id].computed_at_utc
+            if reading.segment_id in speed_limits
+            else None,
         )
 
     @app.get("/v1/segments", response_model=list[SegmentReading])
     @limiter.limit(rate_limit)
     async def list_segments(request: Request) -> list[SegmentReading]:
         readings = read_current_segments(data_dir=data_dir)
-        return [_to_segment_reading(r) for r in readings]
+        speed_limits = read_speed_limits(db_path=speed_limits_db_path)
+        return [_to_segment_reading(r, speed_limits) for r in readings]
 
     @app.get("/v1/segments/{segment_id}", response_model=SegmentReading)
     @limiter.limit(rate_limit)
     async def get_segment(request: Request, segment_id: str) -> SegmentReading:
         readings = read_current_segments(data_dir=data_dir)
+        speed_limits = read_speed_limits(db_path=speed_limits_db_path)
         for r in readings:
             if r.segment_id == segment_id:
-                return _to_segment_reading(r)
+                return _to_segment_reading(r, speed_limits)
         raise HTTPException(status_code=404, detail=f"unknown segment_id: {segment_id}")
 
     @app.get("/v1/status", response_model=StatusResponse)

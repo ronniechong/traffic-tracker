@@ -70,6 +70,13 @@
   flex-shrink: 0;
 }
 
+.segment-tooltip__speed-limit {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #1f2937;
+}
+
 .segment-tooltip__note {
   margin: 0.4rem 0 0;
   font-size: 0.75rem;

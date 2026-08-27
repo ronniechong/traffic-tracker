@@ -15,6 +15,14 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
 ]
+# Only installed into the speed-limit job's own image (see
+# Dockerfile.speedlimit-job) -- kept out of the always-on poller/api image
+# so its minimal, continuously-running footprint doesn't grow for a
+# once-a-month job.
+job = [
+    "shapely>=2.0.0",
+    "ijson>=3.3.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.5.0,<0.12"]

@@ -6,6 +6,7 @@ from traffictracker.api.app import create_app
 from traffictracker.geometry_cache import GeometryStatus
 from traffictracker.models import SegmentRecord
 from traffictracker.quality import SubstitutionTier, substitution_tier
+from traffictracker.speed_limits import SpeedLimitMatch, replace_all
 from traffictracker.status_store import StatusStore
 from traffictracker.storage import HistoryStore
 
@@ -47,17 +48,19 @@ def _record(
 def _make_client(tmp_path, frontend_origin="https://frontend.example.invalid", rate_limit="60/minute"):
     data_dir = tmp_path / "history"
     status_db_path = tmp_path / "status.sqlite3"
+    speed_limits_db_path = tmp_path / "speed_limits.sqlite3"
     app = create_app(
         data_dir=data_dir,
         status_db_path=status_db_path,
+        speed_limits_db_path=speed_limits_db_path,
         frontend_origin=frontend_origin,
         rate_limit=rate_limit,
     )
-    return TestClient(app), data_dir, status_db_path
+    return TestClient(app), data_dir, status_db_path, speed_limits_db_path
 
 
 def test_list_segments_happy_path(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path)
+    client, data_dir, _, _ = _make_client(tmp_path)
     store = HistoryStore(data_dir=data_dir)
     store.write_records([_record(geometry={"type": "Point", "coordinates": [1, 2]})], polled_at_utc=NOW)
     store.close()
@@ -73,7 +76,7 @@ def test_list_segments_happy_path(tmp_path):
 
 
 def test_get_segment_happy_path(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path)
+    client, data_dir, _, _ = _make_client(tmp_path)
     store = HistoryStore(data_dir=data_dir)
     store.write_records([_record(segment_id="S1"), _record(segment_id="S2")], polled_at_utc=NOW)
     store.close()
@@ -84,7 +87,7 @@ def test_get_segment_happy_path(tmp_path):
 
 
 def test_get_segment_unknown_returns_404_error_contract(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path)
+    client, data_dir, _, _ = _make_client(tmp_path)
     store = HistoryStore(data_dir=data_dir)
     store.write_records([_record(segment_id="S1")], polled_at_utc=NOW)
     store.close()
@@ -97,7 +100,7 @@ def test_get_segment_unknown_returns_404_error_contract(tmp_path):
 
 
 def test_two_partition_query_prefers_yesterdays_only_record(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path)
+    client, data_dir, _, _ = _make_client(tmp_path)
     store = HistoryStore(data_dir=data_dir)
     yesterday = NOW - timedelta(days=1)
     store.write_records(
@@ -113,7 +116,7 @@ def test_two_partition_query_prefers_yesterdays_only_record(tmp_path):
 
 
 def test_two_partition_query_prefers_todays_fresher_record(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path)
+    client, data_dir, _, _ = _make_client(tmp_path)
     store = HistoryStore(data_dir=data_dir)
     yesterday = NOW - timedelta(days=1)
     older_time = yesterday.replace(hour=23, minute=0)
@@ -137,7 +140,7 @@ def test_two_partition_query_prefers_todays_fresher_record(tmp_path):
 
 
 def test_data_substitution_tier_matches_quality_module_across_boundaries(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path)
+    client, data_dir, _, _ = _make_client(tmp_path)
     store = HistoryStore(data_dir=data_dir)
     store.write_records(
         [
@@ -161,7 +164,7 @@ def test_data_substitution_tier_matches_quality_module_across_boundaries(tmp_pat
 
 
 def test_geometry_status_round_trips_non_available_value(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path)
+    client, data_dir, _, _ = _make_client(tmp_path)
     store = HistoryStore(data_dir=data_dir)
     store.write_records(
         [_record(segment_id="S1", geometry_status=GeometryStatus.NEVER_AVAILABLE, geometry=None)],
@@ -174,7 +177,7 @@ def test_geometry_status_round_trips_non_available_value(tmp_path):
 
 
 def test_blank_since_and_persistent_blank_reflect_continuous_history(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path)
+    client, data_dir, _, _ = _make_client(tmp_path)
     store = HistoryStore(data_dir=data_dir)
     blank_start = NOW - timedelta(hours=3)
     store.write_records(
@@ -194,7 +197,7 @@ def test_blank_since_and_persistent_blank_reflect_continuous_history(tmp_path):
 
 
 def test_transient_blank_is_not_persistent(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path)
+    client, data_dir, _, _ = _make_client(tmp_path)
     store = HistoryStore(data_dir=data_dir)
     store.write_records(
         [_record(segment_id="S1", published_time_utc=NOW, condition="Blank")], polled_at_utc=NOW
@@ -207,8 +210,42 @@ def test_transient_blank_is_not_persistent(tmp_path):
     assert body["persistent_blank"] is False
 
 
+def test_speed_limit_joined_when_reference_exists(tmp_path):
+    client, data_dir, _, speed_limits_db_path = _make_client(tmp_path)
+    store = HistoryStore(data_dir=data_dir)
+    store.write_records([_record(segment_id="S1"), _record(segment_id="S2")], polled_at_utc=NOW)
+    store.close()
+
+    replace_all(
+        [
+            SpeedLimitMatch(segment_id="S1", speed_limit_kmh=100, overlap_ratio=0.95, matched_zone_count=2),
+            SpeedLimitMatch(segment_id="S2", speed_limit_kmh=80, overlap_ratio=0.55, matched_zone_count=6),
+        ],
+        db_path=speed_limits_db_path,
+        computed_at_utc=NOW,
+    )
+
+    body = {row["segment_id"]: row for row in client.get("/v1/segments").json()}
+    assert body["S1"]["speed_limit_kmh"] == 100
+    assert body["S1"]["speed_limit_confident"] is True
+    assert body["S2"]["speed_limit_kmh"] == 80
+    assert body["S2"]["speed_limit_confident"] is False
+
+
+def test_speed_limit_omitted_when_no_reference_row(tmp_path):
+    client, data_dir, _, _ = _make_client(tmp_path)
+    store = HistoryStore(data_dir=data_dir)
+    store.write_records([_record(segment_id="S1")], polled_at_utc=NOW)
+    store.close()
+
+    body = client.get("/v1/segments/S1").json()
+    assert body["speed_limit_kmh"] is None
+    assert body["speed_limit_confident"] is None
+    assert body["speed_limit_computed_at_utc"] is None
+
+
 def test_status_ok_when_circuit_not_tripped(tmp_path):
-    client, _, status_db_path = _make_client(tmp_path)
+    client, _, status_db_path, _ = _make_client(tmp_path)
     status_store = StatusStore(db_path=status_db_path)
     status_store.write_status(
         consecutive_failures=0,
@@ -226,7 +263,7 @@ def test_status_ok_when_circuit_not_tripped(tmp_path):
 
 
 def test_status_degraded_when_circuit_tripped(tmp_path):
-    client, _, status_db_path = _make_client(tmp_path)
+    client, _, status_db_path, _ = _make_client(tmp_path)
     status_store = StatusStore(db_path=status_db_path)
     status_store.write_status(
         consecutive_failures=3,
@@ -243,7 +280,7 @@ def test_status_degraded_when_circuit_tripped(tmp_path):
 
 
 def test_status_baseline_unstable_when_traffic_baseline_drifted(tmp_path):
-    client, _, status_db_path = _make_client(tmp_path)
+    client, _, status_db_path, _ = _make_client(tmp_path)
     status_store = StatusStore(db_path=status_db_path)
     status_store.write_status(
         consecutive_failures=0,
@@ -258,7 +295,7 @@ def test_status_baseline_unstable_when_traffic_baseline_drifted(tmp_path):
 
 
 def test_status_baseline_stable_when_gis_not_yet_checked(tmp_path):
-    client, _, status_db_path = _make_client(tmp_path)
+    client, _, status_db_path, _ = _make_client(tmp_path)
     status_store = StatusStore(db_path=status_db_path)
     status_store.write_status(
         consecutive_failures=0,
@@ -273,7 +310,7 @@ def test_status_baseline_stable_when_gis_not_yet_checked(tmp_path):
 
 
 def test_status_default_when_no_row_exists(tmp_path):
-    client, _, _ = _make_client(tmp_path)
+    client, _, _, _ = _make_client(tmp_path)
 
     response = client.get("/v1/status")
     body = response.json()
@@ -282,7 +319,7 @@ def test_status_default_when_no_row_exists(tmp_path):
 
 
 def test_rate_limit_rejects_after_limit(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path, rate_limit="3/minute")
+    client, data_dir, _, _ = _make_client(tmp_path, rate_limit="3/minute")
     store = HistoryStore(data_dir=data_dir)
     store.write_records([_record()], polled_at_utc=NOW)
     store.close()
@@ -293,7 +330,7 @@ def test_rate_limit_rejects_after_limit(tmp_path):
 
 
 def test_cors_reflects_configured_origin(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path, frontend_origin="https://frontend.example.invalid")
+    client, data_dir, _, _ = _make_client(tmp_path, frontend_origin="https://frontend.example.invalid")
     store = HistoryStore(data_dir=data_dir)
     store.write_records([_record()], polled_at_utc=NOW)
     store.close()
@@ -303,7 +340,7 @@ def test_cors_reflects_configured_origin(tmp_path):
 
 
 def test_cors_does_not_reflect_unconfigured_origin(tmp_path):
-    client, data_dir, _ = _make_client(tmp_path, frontend_origin="https://frontend.example.invalid")
+    client, data_dir, _, _ = _make_client(tmp_path, frontend_origin="https://frontend.example.invalid")
     store = HistoryStore(data_dir=data_dir)
     store.write_records([_record()], polled_at_utc=NOW)
     store.close()

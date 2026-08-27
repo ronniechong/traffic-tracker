@@ -22,6 +22,9 @@ class SegmentReading(BaseModel):
     has_override: bool
     blank_since_utc: str | None
     persistent_blank: bool
+    speed_limit_kmh: int | None
+    speed_limit_confident: bool | None
+    speed_limit_computed_at_utc: str | None
 
 
 class StatusResponse(BaseModel):
