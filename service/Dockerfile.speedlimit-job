@@ -35,9 +35,11 @@ ENV PATH="/app/.venv/bin:${PATH}" \
 USER app
 
 # storage.py derives its data path from the installed src layout, which
-# resolves under this WORKDIR to /app/data -- read-only for this job
-# (it only reads current segments, never writes readings). The reference
-# DB's directory is the one writable mount this job needs.
-VOLUME ["/app/data", "/app/data/reference"]
+# resolves under this WORKDIR to /app/data. A single volume, not a nested
+# second entry for /app/data/reference -- declaring both makes Docker
+# treat the nested path as its own anonymous volume, shadowing the real
+# bind-mounted subdirectory underneath /app/data with a fresh,
+# root-owned one at container start.
+VOLUME ["/app/data"]
 
 ENTRYPOINT ["python", "-m", "traffictracker.speedlimit_job"]
