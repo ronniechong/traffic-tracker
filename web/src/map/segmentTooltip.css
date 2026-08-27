@@ -29,9 +29,22 @@
   font-weight: 600;
 }
 
+.segment-tooltip__direction-row {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.segment-tooltip__direction-row:first-of-type {
+  margin-top: 0.3rem;
+  padding-top: 0;
+  border-top: none;
+}
+
 .segment-tooltip__direction {
-  margin: 0.1rem 0 0;
+  margin: 0;
   font-size: 0.8rem;
+  font-weight: 600;
   color: #6b7280;
 }
 

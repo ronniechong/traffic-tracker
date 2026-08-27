@@ -40,20 +40,36 @@ function dataQualityNote(segment: Segment): string | null {
   return null
 }
 
-export function renderSegmentTooltipHtml(segment: Segment): string {
+/** Groups segments so both directions of the same stretch (which render as
+ * separate, closely-parallel lines) show together in one tooltip -- clicking
+ * precisely on just one direction's thin line is impractical at this scale. */
+export function groupKeyFor(segment: Segment): string {
+  return `${segment.freeway_name}::${segment.segment_name}`
+}
+
+function renderDirectionRow(segment: Segment): string {
   const dotColor = segment.persistent_blank ? '#4b5563' : (CONDITION_COLORS[segment.condition] ?? CONDITION_COLORS.Blank)
   const note = dataQualityNote(segment)
 
   return `
-    <div class="${SEGMENT_TOOLTIP_CLASS}__body">
-      <p class="${SEGMENT_TOOLTIP_CLASS}__freeway">${escapeHtml(freewayDisplayName(segment.freeway_name))}</p>
-      <p class="${SEGMENT_TOOLTIP_CLASS}__segment">${escapeHtml(segment.segment_name)}</p>
+    <div class="${SEGMENT_TOOLTIP_CLASS}__direction-row">
       <p class="${SEGMENT_TOOLTIP_CLASS}__direction">${escapeHtml(segment.direction)}</p>
       <p class="${SEGMENT_TOOLTIP_CLASS}__condition">
         <span class="${SEGMENT_TOOLTIP_CLASS}__dot" style="background-color:${dotColor}"></span>
         ${escapeHtml(conditionLabel(segment))}
       </p>
       ${note ? `<p class="${SEGMENT_TOOLTIP_CLASS}__note">${escapeHtml(note)}</p>` : ''}
+    </div>
+  `
+}
+
+export function renderSegmentTooltipHtml(segments: Segment[]): string {
+  const [first] = segments
+  return `
+    <div class="${SEGMENT_TOOLTIP_CLASS}__body">
+      <p class="${SEGMENT_TOOLTIP_CLASS}__freeway">${escapeHtml(freewayDisplayName(first.freeway_name))}</p>
+      <p class="${SEGMENT_TOOLTIP_CLASS}__segment">${escapeHtml(first.segment_name)}</p>
+      ${segments.map(renderDirectionRow).join('')}
     </div>
   `
 }
