@@ -12,7 +12,12 @@ const OPENFREEMAP_STYLES: Record<Theme, string> = {
 }
 
 const SEGMENTS_SOURCE_ID = 'freeway-segments'
-const SEGMENT_LINES_LAYER_ID = 'freeway-segment-lines'
+export const SEGMENT_LINES_LAYER_ID = 'freeway-segment-lines'
+
+// A few pixels of slack around the click point -- segment lines are thin
+// (3px) and often close together, so an exact-pixel hit test would miss
+// clicks that visually land on a line.
+const CLICK_HIT_RADIUS_PX = 4
 
 // Centers on the CBD for first load -- most freeway corridors converge
 // there, so it's a more useful starting view than the whole metro extent.
@@ -143,4 +148,17 @@ export function setSegmentData(map: maplibregl.Map, segments: Segment[]): void {
 export function setMapStyle(map: maplibregl.Map, theme: Theme, onReady: () => void): void {
   map.setStyle(OPENFREEMAP_STYLES[theme])
   map.once('style.load', onReady)
+}
+
+/** Returns the `segment_id` of the segment nearest a click point, or
+ * `undefined` if the click didn't land on (or near) a rendered segment. */
+export function querySegmentIdAtPoint(map: maplibregl.Map, point: maplibregl.PointLike): string | undefined {
+  const { x, y } = point as { x: number; y: number }
+  const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
+    [x - CLICK_HIT_RADIUS_PX, y - CLICK_HIT_RADIUS_PX],
+    [x + CLICK_HIT_RADIUS_PX, y + CLICK_HIT_RADIUS_PX],
+  ]
+  const features = map.queryRenderedFeatures(bbox, { layers: [SEGMENT_LINES_LAYER_ID] })
+  const id = features[0]?.properties?.id
+  return typeof id === 'string' ? id : undefined
 }
