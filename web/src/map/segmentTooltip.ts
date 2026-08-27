@@ -1,20 +1,6 @@
 import type { Segment } from '../api-types'
 import { freewayDisplayName } from '../lib/freewayDisplayName'
 
-// Date+time (not just time) -- a segment's own reading can be from an
-// earlier day if it's stale or persistently blank, and time-only would
-// silently misrepresent that.
-const publishedTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
-
-function formatPublishedTime(publishedTimeUtc: string): string | null {
-  const date = new Date(publishedTimeUtc)
-  if (Number.isNaN(date.getTime())) return null
-  return publishedTimeFormatter.format(date)
-}
-
 export const SEGMENT_TOOLTIP_CLASS = 'segment-tooltip'
 
 const ESTIMATED_TIERS = new Set(['partially_interpolated', 'majority_interpolated'])
@@ -57,7 +43,6 @@ function dataQualityNote(segment: Segment): string | null {
 function renderDirectionRow(segment: Segment): string {
   const dotColor = segment.persistent_blank ? '#4b5563' : (CONDITION_COLORS[segment.condition] ?? CONDITION_COLORS.Blank)
   const note = dataQualityNote(segment)
-  const publishedTime = formatPublishedTime(segment.published_time_utc)
 
   return `
     <div class="${SEGMENT_TOOLTIP_CLASS}__direction-row">
@@ -66,7 +51,6 @@ function renderDirectionRow(segment: Segment): string {
         <span class="${SEGMENT_TOOLTIP_CLASS}__dot" style="background-color:${dotColor}"></span>
         ${escapeHtml(conditionLabel(segment))}
       </p>
-      ${publishedTime ? `<p class="${SEGMENT_TOOLTIP_CLASS}__updated">Updated ${escapeHtml(publishedTime)}</p>` : ''}
       ${note ? `<p class="${SEGMENT_TOOLTIP_CLASS}__note">${escapeHtml(note)}</p>` : ''}
     </div>
   `
