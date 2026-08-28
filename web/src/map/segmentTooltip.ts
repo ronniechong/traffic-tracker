@@ -50,13 +50,14 @@ function renderSpeedLimitLine(segment: Segment): string {
   const label = uncertain
     ? `Speed limit: ~${segment.speed_limit_kmh} km/h (uncertain)`
     : `Speed limit: ${segment.speed_limit_kmh} km/h`
-  const disclaimer = uncertain
-    ? 'VicRoads speed-zone data, monthly-refreshed, not live. Multiple overlapping zones near this segment -- limit shown is the best match, not certain.'
-    : 'VicRoads speed-zone data, monthly-refreshed, not live.'
 
   return `
     <p class="${SEGMENT_TOOLTIP_CLASS}__speed-limit">${escapeHtml(label)}</p>
-    <p class="${SEGMENT_TOOLTIP_CLASS}__note">${escapeHtml(disclaimer)}</p>
+    ${
+      uncertain
+        ? `<p class="${SEGMENT_TOOLTIP_CLASS}__note">Multiple overlapping zones near this segment -- limit shown is the best match, not certain.</p>`
+        : ''
+    }
   `
 }
 

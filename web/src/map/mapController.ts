@@ -11,7 +11,7 @@ const OPENFREEMAP_STYLES: Record<Theme, string> = {
   dark: 'https://tiles.openfreemap.org/styles/dark',
 }
 
-const SEGMENTS_SOURCE_ID = 'freeway-segments'
+export const SEGMENTS_SOURCE_ID = 'freeway-segments'
 export const SEGMENT_LINES_LAYER_ID = 'freeway-segment-lines'
 
 // A few pixels of slack around the click point -- segment lines are thin

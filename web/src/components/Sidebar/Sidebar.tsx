@@ -37,6 +37,9 @@ export function Sidebar({ status, isPolling, freeways, hiddenFreeways, onToggleF
           Light/Medium/Heavy conditions are classified by VicRoads (the same labels shown on their freeway signs) —
           the exact thresholds behind each label aren't published.
         </p>
+        <p className={styles.attribution}>
+          Speed limits shown are VicRoads' own speed-zone data, monthly-refreshed, not live.
+        </p>
       </div>
     </aside>
   )

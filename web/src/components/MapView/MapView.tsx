@@ -10,6 +10,7 @@ import {
   type Theme,
 } from '../../map/mapController'
 import { renderSegmentTooltipHtml, SEGMENT_TOOLTIP_CLASS } from '../../map/segmentTooltip'
+import { createTrafficFlowController, type TrafficFlowController } from '../../map/trafficFlow'
 import '../../map/segmentTooltip.css'
 import type { Segment } from '../../api-types'
 import { LoadingOverlay } from '../LoadingOverlay'
@@ -30,6 +31,7 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
   const mapRef = useRef<maplibregl.Map | null>(null)
   const segmentsRef = useRef<Segment[] | null>(segments)
   const popupRef = useRef<maplibregl.Popup | null>(null)
+  const trafficFlowRef = useRef<TrafficFlowController | null>(null)
   const selectedLngLatRef = useRef<maplibregl.LngLat | null>(null)
   const [isMapLoading, setIsMapLoading] = useState(true)
   // The segment IDs within the click hit-test buffer, not the segment
@@ -59,6 +61,11 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
     map.on('load', () => {
       addSegmentLayer(map)
       if (segmentsRef.current) setSegmentData(map, segmentsRef.current)
+      // PROTOTYPE: animated traffic-flow overlay, see trafficFlow.ts.
+      const trafficFlow = createTrafficFlowController(map)
+      if (segmentsRef.current) trafficFlow.setData(segmentsRef.current)
+      trafficFlow.start()
+      trafficFlowRef.current = trafficFlow
       setIsMapLoading(false)
       onMapReady?.()
     })
@@ -84,6 +91,7 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
     })
 
     return () => {
+      trafficFlowRef.current?.stop()
       map.remove()
       mapRef.current = null
       popupRef.current = null
@@ -98,6 +106,7 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
     const map = mapRef.current
     if (!map || !segments) return
     setSegmentData(map, segments)
+    trafficFlowRef.current?.setData(segments)
   }, [segments])
 
   useEffect(() => {
@@ -131,9 +140,14 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
     // and rebuilds the map's sources/layers -- reapply whatever data was
     // already showing immediately, rather than leaving a blank map until
     // the next poll cycle.
+    trafficFlowRef.current?.stop()
     setMapStyle(map, theme, () => {
       addSegmentLayer(map)
       if (segmentsRef.current) setSegmentData(map, segmentsRef.current)
+      const trafficFlow = createTrafficFlowController(map)
+      if (segmentsRef.current) trafficFlow.setData(segmentsRef.current)
+      trafficFlow.start()
+      trafficFlowRef.current = trafficFlow
     })
   }, [theme])
 

@@ -1,7 +1,7 @@
 import { copyFileSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const require = createRequire(import.meta.url)
@@ -31,16 +31,35 @@ function copyMaplibreWorker(): Plugin {
   }
 }
 
-export default defineConfig(({ command }) => ({
-  plugins: [react(), copyMaplibreWorker()],
-  // GitHub Pages serves this as a project site under /traffic-tracker/, not
-  // the origin root -- asset URLs need that prefix baked in at build time.
-  // Dev/preview keep serving from `/`.
-  base: command === 'build' ? '/traffic-tracker/' : '/',
-  // Letting Vite's dev-time dependency pre-bundler rewrite maplibre-gl's
-  // own worker bundle hangs the worker's script request indefinitely.
-  // Excluding it makes Vite serve the package as-is instead.
-  optimizeDeps: {
-    exclude: ['maplibre-gl'],
-  },
-}))
+export default defineConfig(({ command, mode }) => {
+  // VITE_DEV_API_PROXY_TARGET is dev-only (set in a gitignored .env.local,
+  // never committed) -- keeps the actual API host out of source, matching
+  // this repo's convention of injecting infra specifics via env rather
+  // than literals in committed config.
+  const env = loadEnv(mode, process.cwd(), 'VITE_')
+  const devApiProxyTarget = env.VITE_DEV_API_PROXY_TARGET
+
+  return {
+    plugins: [react(), copyMaplibreWorker()],
+    // GitHub Pages serves this as a project site under /traffic-tracker/,
+    // not the origin root -- asset URLs need that prefix baked in at
+    // build time. Dev/preview keep serving from `/`.
+    base: command === 'build' ? '/traffic-tracker/' : '/',
+    // Letting Vite's dev-time dependency pre-bundler rewrite maplibre-gl's
+    // own worker bundle hangs the worker's script request indefinitely.
+    // Excluding it makes Vite serve the package as-is instead.
+    optimizeDeps: {
+      exclude: ['maplibre-gl'],
+    },
+    // Dev-only: proxies API calls through Vite's own server so the
+    // browser sees a same-origin request -- the deployed API's CORS
+    // policy only allows the production frontend origin, which
+    // `localhost` isn't. The proxy issues the real request server-side,
+    // where browser CORS doesn't apply. Never used in the production
+    // build (that talks to VITE_API_BASE_URL directly, per api.ts); a
+    // no-op locally too unless VITE_DEV_API_PROXY_TARGET is set.
+    server: devApiProxyTarget
+      ? { proxy: { '/v1': { target: devApiProxyTarget, changeOrigin: true } } }
+      : undefined,
+  }
+})
