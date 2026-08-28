@@ -184,6 +184,11 @@ export function createTrafficFlowController(map: maplibregl.Map): TrafficFlowCon
 
   let rafId: number | null = null
   let lastFrameTime = performance.now()
+  // Separate from `rafId`'s "is a frame currently scheduled" -- this is
+  // "does the caller want animation running at all," so a backgrounded
+  // tab pausing the loop doesn't get mistaken for the caller having
+  // called stop() (which also tears down the visibility listener).
+  let wantsRunning = false
 
   function tick(now: number) {
     const delta = now - lastFrameTime
@@ -209,15 +214,39 @@ export function createTrafficFlowController(map: maplibregl.Map): TrafficFlowCon
     rafId = requestAnimationFrame(tick)
   }
 
-  function start() {
+  function startLoop() {
     if (rafId !== null) return
     lastFrameTime = performance.now()
     rafId = requestAnimationFrame(tick)
   }
 
-  function stop() {
+  function stopLoop() {
     if (rafId !== null) cancelAnimationFrame(rafId)
     rafId = null
+  }
+
+  // A backgrounded/minimized tab still runs `requestAnimationFrame` (browsers
+  // throttle it, but don't stop it), which keeps repainting a WebGL canvas
+  // nobody can see -- pausing outright on visibilitychange is a real, free
+  // CPU/battery saving rather than relying on browser throttling alone.
+  function handleVisibilityChange() {
+    if (document.hidden) {
+      stopLoop()
+    } else if (wantsRunning) {
+      startLoop()
+    }
+  }
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+
+  function start() {
+    wantsRunning = true
+    if (!document.hidden) startLoop()
+  }
+
+  function stop() {
+    wantsRunning = false
+    stopLoop()
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
   }
 
   return { setData, start, stop }
