@@ -12,6 +12,7 @@ import {
 import { renderSegmentTooltipHtml, SEGMENT_TOOLTIP_CLASS } from '../../map/segmentTooltip'
 import { createTrafficFlowController, type TrafficFlowController } from '../../map/trafficFlow'
 import '../../map/segmentTooltip.css'
+import '../../map/userLocation.css'
 import type { Segment } from '../../api-types'
 import { LoadingOverlay } from '../LoadingOverlay'
 import styles from './MapView.module.css'
@@ -24,15 +25,38 @@ interface MapViewProps {
    * shows itself as soon as it can render, even before the first poll
    * response arrives. */
   onMapReady?: () => void
+  /** Whether the user has asked to see their live device location. */
+  tracking?: boolean
+  /** Fired when tracking stops for any reason other than the caller
+   * setting `tracking` to false (permission denied, position error, the
+   * user pressing the built-in control). */
+  onTrackingChange?: (tracking: boolean) => void
+  onTrackingError?: (message: string) => void
 }
 
-export function MapView({ theme, segments, onMapReady }: MapViewProps) {
+export function MapView({
+  theme,
+  segments,
+  onMapReady,
+  tracking = false,
+  onTrackingChange,
+  onTrackingError,
+}: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const segmentsRef = useRef<Segment[] | null>(segments)
   const popupRef = useRef<maplibregl.Popup | null>(null)
   const trafficFlowRef = useRef<TrafficFlowController | null>(null)
   const selectedLngLatRef = useRef<maplibregl.LngLat | null>(null)
+  const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null)
+  // Our own mirror of the control's active state -- GeolocateControl
+  // doesn't expose one, and `trigger()` toggles, so we need to know
+  // whether a call will turn it on or off.
+  const geolocateActiveRef = useRef(false)
+  const onTrackingChangeRef = useRef(onTrackingChange)
+  const onTrackingErrorRef = useRef(onTrackingError)
+  onTrackingChangeRef.current = onTrackingChange
+  onTrackingErrorRef.current = onTrackingError
   const [isMapLoading, setIsMapLoading] = useState(true)
   // The segment IDs within the click hit-test buffer, not the segment
   // objects themselves -- content is re-derived from the latest `segments`
@@ -57,6 +81,31 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
     })
     popup.on('close', () => setSelectedSegmentIds([]))
     popupRef.current = popup
+
+    const geolocate = new maplibregl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true },
+      trackUserLocation: true,
+      showUserLocation: true,
+      showAccuracyCircle: true,
+    })
+    map.addControl(geolocate)
+    geolocateRef.current = geolocate
+    geolocate.on('trackuserlocationstart', () => {
+      geolocateActiveRef.current = true
+    })
+    geolocate.on('trackuserlocationend', () => {
+      geolocateActiveRef.current = false
+      onTrackingChangeRef.current?.(false)
+    })
+    geolocate.on('error', (err: { code?: number }) => {
+      geolocateActiveRef.current = false
+      onTrackingChangeRef.current?.(false)
+      const message =
+        err?.code === 1
+          ? 'Location access was denied. Enable it in your browser settings to use Track me.'
+          : "Couldn't get your location. Try again in a moment."
+      onTrackingErrorRef.current?.(message)
+    })
 
     map.on('load', () => {
       addSegmentLayer(map)
@@ -95,11 +144,28 @@ export function MapView({ theme, segments, onMapReady }: MapViewProps) {
       map.remove()
       mapRef.current = null
       popupRef.current = null
+      geolocateRef.current = null
     }
     // theme changes are handled by a separate effect below; re-running
     // this one would tear down and rebuild the whole map unnecessarily.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (isMapLoading) return
+    const geolocate = geolocateRef.current
+    if (!geolocate) return
+    // `trigger()` toggles; only call it when the desired and actual states
+    // differ, and ignore the transient false it triggers back through
+    // `onTrackingChange` for a caller-initiated stop.
+    if (tracking && !geolocateActiveRef.current) {
+      geolocateActiveRef.current = true
+      geolocate.trigger()
+    } else if (!tracking && geolocateActiveRef.current) {
+      geolocateActiveRef.current = false
+      geolocate.trigger()
+    }
+  }, [tracking, isMapLoading])
 
   useEffect(() => {
     segmentsRef.current = segments

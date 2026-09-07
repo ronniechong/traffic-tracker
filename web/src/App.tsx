@@ -3,6 +3,7 @@ import { MapView } from './components/MapView/MapView'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { useTrafficData } from './hooks/useTrafficData'
 import type { Theme } from './map/mapController'
+import styles from './App.module.css'
 
 function getPreferredTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -11,6 +12,9 @@ function getPreferredTheme(): Theme {
 export function App() {
   const [theme, setTheme] = useState<Theme>(getPreferredTheme)
   const [hiddenFreeways, setHiddenFreeways] = useState<ReadonlySet<string>>(new Set())
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [tracking, setTracking] = useState(false)
+  const [trackingError, setTrackingError] = useState<string | null>(null)
   const { segments, status, isPolling } = useTrafficData()
 
   useEffect(() => {
@@ -40,17 +44,49 @@ export function App() {
     })
   }
 
+  function handleToggleTracking() {
+    setTrackingError(null)
+    setTracking((prev) => !prev)
+  }
+
   return (
-    <div style={{ height: '100dvh', width: '100vw', display: 'flex' }}>
+    <div className={styles.shell}>
+      <button
+        type="button"
+        className={styles.menuButton}
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open menu"
+      >
+        ☰
+      </button>
+      {sidebarOpen && (
+        <button
+          type="button"
+          className={styles.backdrop}
+          aria-label="Close menu"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <Sidebar
         status={status}
         isPolling={isPolling}
         freeways={freeways}
         hiddenFreeways={hiddenFreeways}
         onToggleFreeway={handleToggleFreeway}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        tracking={tracking}
+        trackingError={trackingError}
+        onToggleTracking={handleToggleTracking}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <MapView theme={theme} segments={visibleSegments} />
+      <div className={styles.mapArea}>
+        <MapView
+          theme={theme}
+          segments={visibleSegments}
+          tracking={tracking}
+          onTrackingChange={setTracking}
+          onTrackingError={setTrackingError}
+        />
       </div>
     </div>
   )

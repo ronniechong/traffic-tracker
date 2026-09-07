@@ -17,3 +17,10 @@
   height: 100%;
   width: 100%;
 }
+
+/* The geolocation control is driven from the sidebar "Track me" button, so
+   its own on-map button is redundant -- keep the control (for the location
+   dot and accuracy circle it renders) but hide its trigger. */
+.map :global(.maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate)) {
+  display: none;
+}
