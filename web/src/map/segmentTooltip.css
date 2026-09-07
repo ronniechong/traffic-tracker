@@ -14,6 +14,35 @@
   border-bottom-color: #ffffff;
 }
 
+/* MapLibre's default close button is a ~18px glyph in the corner -- too
+   small to hit reliably on touch. Give it a real tap target. */
+.segment-tooltip .maplibregl-popup-close-button {
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.4rem;
+  line-height: 2rem;
+  color: #6b7280;
+  border-radius: 0 8px 0 8px;
+}
+
+.segment-tooltip .maplibregl-popup-close-button:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .segment-tooltip .maplibregl-popup-close-button {
+    width: 2.75rem;
+    height: 2.75rem;
+    font-size: 1.8rem;
+    line-height: 2.75rem;
+  }
+
+  .segment-tooltip .maplibregl-popup-content {
+    padding-top: 1.75rem;
+  }
+}
+
 .segment-tooltip__freeway {
   margin: 0;
   font-size: 0.7rem;
