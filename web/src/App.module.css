@@ -32,14 +32,14 @@
     width: 2.75rem;
     height: 2.75rem;
     padding: 0;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--tt-border);
     border-radius: 8px;
-    background: #ffffff;
-    color: #1f2937;
+    background: var(--tt-bg);
+    color: var(--tt-text);
     font-size: 1.4rem;
     line-height: 1;
     cursor: pointer;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 4px var(--tt-shadow);
   }
 
   .backdrop {

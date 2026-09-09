@@ -3,10 +3,10 @@
   flex-shrink: 0;
   height: 100%;
   overflow-y: auto;
-  background: #ffffff;
-  border-right: 1px solid #e5e7eb;
+  background: var(--tt-bg);
+  border-right: 1px solid var(--tt-border);
   font-family: system-ui, sans-serif;
-  color: #1f2937;
+  color: var(--tt-text);
 }
 
 .closeButton {
@@ -25,7 +25,7 @@
     max-width: 320px;
     transform: translateX(-100%);
     transition: transform 0.2s ease;
-    box-shadow: 0 0 24px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0 24px var(--tt-shadow);
   }
 
   .sidebarOpen {
@@ -43,7 +43,7 @@
     height: 2.5rem;
     border: none;
     background: transparent;
-    color: #6b7280;
+    color: var(--tt-text-muted);
     font-size: 1.6rem;
     line-height: 1;
     cursor: pointer;
@@ -61,7 +61,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--tt-border);
 }
 
 .logo {
@@ -75,9 +75,15 @@
   margin: 0;
 }
 
+.themeToggle {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
 .section {
   padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--tt-border);
 }
 
 .sectionTitle {
@@ -85,7 +91,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #6b7280;
+  color: var(--tt-text-muted);
   margin: 0 0 0.5rem;
 }
 
@@ -115,27 +121,27 @@
 .dashSwatch {
   width: 1.5rem;
   height: 0;
-  border-bottom: 2px dashed #6b7280;
+  border-bottom: 2px dashed var(--tt-text-muted);
   flex-shrink: 0;
 }
 
 .legendNote {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--tt-text-muted);
   margin: 0.75rem 0 0;
   line-height: 1.4;
 }
 
 .disclaimer {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--tt-text-muted);
   margin: 0 0 0.5rem;
   line-height: 1.4;
 }
 
 .attribution {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--tt-text-faint);
   margin: 0;
 }
 
@@ -175,7 +181,7 @@
 .toggleTrack {
   position: absolute;
   inset: 0;
-  background: #d1d5db;
+  background: var(--tt-toggle-off);
   border-radius: 999px;
   transition: background-color 0.15s ease;
 }
@@ -207,10 +213,10 @@
   gap: 0.4rem;
   width: 100%;
   padding: 0.6rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--tt-border);
   border-radius: 8px;
-  background: #ffffff;
-  color: #1f2937;
+  background: var(--tt-bg);
+  color: var(--tt-text);
   font: inherit;
   font-size: 0.85rem;
   font-weight: 600;
@@ -218,25 +224,25 @@
 }
 
 .trackButton:hover {
-  background: #f9fafb;
+  background: var(--tt-bg-raised);
 }
 
 .trackButtonActive {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border-color: var(--tt-accent);
+  background: var(--tt-accent-bg);
+  color: var(--tt-accent-text);
 }
 
 .trackHint {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--tt-text-muted);
   margin: 0.5rem 0 0;
   line-height: 1.4;
 }
 
 .trackError {
   font-size: 0.75rem;
-  color: #dc2626;
+  color: var(--tt-danger);
   margin: 0.5rem 0 0;
   line-height: 1.4;
 }
@@ -246,7 +252,7 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.8rem;
-  color: #6b7280;
+  color: var(--tt-text-muted);
   margin: 0;
 }
 
@@ -254,7 +260,7 @@
   width: 0.8rem;
   height: 0.8rem;
   border-radius: 50%;
-  border: 2px solid #d4d4d8;
+  border: 2px solid var(--tt-border);
   border-top-color: #f97316;
   animation: spin 0.8s linear infinite;
   flex-shrink: 0;

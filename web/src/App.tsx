@@ -1,28 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { MapView } from './components/MapView/MapView'
 import { Sidebar } from './components/Sidebar/Sidebar'
+import { useTheme } from './hooks/useTheme'
 import { useTrafficData } from './hooks/useTrafficData'
-import type { Theme } from './map/mapController'
 import styles from './App.module.css'
 
-function getPreferredTheme(): Theme {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
 export function App() {
-  const [theme, setTheme] = useState<Theme>(getPreferredTheme)
+  // Lifted here so the app chrome (via data-theme + CSS tokens) and the
+  // map's own basemap swap stay in sync off one value.
+  const [theme, setTheme] = useTheme()
   const [hiddenFreeways, setHiddenFreeways] = useState<ReadonlySet<string>>(new Set())
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [tracking, setTracking] = useState(false)
   const [trackingError, setTrackingError] = useState<string | null>(null)
   const { segments, status, isPolling } = useTrafficData()
-
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => setTheme(query.matches ? 'dark' : 'light')
-    query.addEventListener('change', onChange)
-    return () => query.removeEventListener('change', onChange)
-  }, [])
 
   const freeways = useMemo(() => {
     if (!segments) return []
@@ -78,6 +69,8 @@ export function App() {
         tracking={tracking}
         trackingError={trackingError}
         onToggleTracking={handleToggleTracking}
+        theme={theme}
+        onThemeChange={setTheme}
       />
       <div className={styles.mapArea}>
         <MapView

@@ -2,6 +2,42 @@
   box-sizing: border-box;
 }
 
+/* Light is the default; `data-theme="dark"` on <html> (set from the sidebar
+   theme control, or from the OS preference when that control is on
+   "System") swaps the palette. Every chrome colour resolves through these
+   tokens so a single override block covers the whole UI. */
+:root {
+  --tt-bg: #ffffff;
+  --tt-bg-raised: #f9fafb;
+  --tt-overlay-bg: #f5f5f4;
+  --tt-border: #e5e7eb;
+  --tt-text: #1f2937;
+  --tt-text-muted: #6b7280;
+  --tt-text-faint: #9ca3af;
+  --tt-accent: #2563eb;
+  --tt-accent-text: #1d4ed8;
+  --tt-accent-bg: #eff6ff;
+  --tt-danger: #dc2626;
+  --tt-toggle-off: #d1d5db;
+  --tt-shadow: rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme='dark'] {
+  --tt-bg: #1a1d21;
+  --tt-bg-raised: #242830;
+  --tt-overlay-bg: #16181c;
+  --tt-border: #343a42;
+  --tt-text: #e5e7eb;
+  --tt-text-muted: #9aa4b2;
+  --tt-text-faint: #6b7280;
+  --tt-accent: #3b82f6;
+  --tt-accent-text: #93c5fd;
+  --tt-accent-bg: #1e293b;
+  --tt-danger: #f87171;
+  --tt-toggle-off: #4b5563;
+  --tt-shadow: rgba(0, 0, 0, 0.5);
+}
+
 html,
 body,
 #app {
@@ -9,4 +45,9 @@ body,
   padding: 0;
   height: 100%;
   font-family: system-ui, sans-serif;
+}
+
+body {
+  background: var(--tt-bg);
+  color: var(--tt-text);
 }

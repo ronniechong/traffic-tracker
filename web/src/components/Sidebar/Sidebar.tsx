@@ -2,6 +2,7 @@ import { Header } from './Header'
 import { Legend } from './Legend'
 import { FreewayList } from './FreewayList'
 import { formatUpdatedAt } from '../../lib/formatUpdatedAt'
+import type { Theme } from '../../map/mapController'
 import type { StatusResponse } from '../../api-types'
 import styles from './Sidebar.module.css'
 
@@ -16,6 +17,8 @@ interface SidebarProps {
   tracking: boolean
   trackingError: string | null
   onToggleTracking: () => void
+  theme: Theme
+  onThemeChange: (theme: Theme) => void
 }
 
 export function Sidebar({
@@ -29,6 +32,8 @@ export function Sidebar({
   tracking,
   trackingError,
   onToggleTracking,
+  theme,
+  onThemeChange,
 }: SidebarProps) {
   const updatedAt = formatUpdatedAt(status?.updated_at_utc)
 
@@ -37,7 +42,7 @@ export function Sidebar({
       <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Close menu">
         &times;
       </button>
-      <Header />
+      <Header theme={theme} onThemeChange={onThemeChange} />
       <Legend />
       <FreewayList freeways={freeways} hidden={hiddenFreeways} onToggle={onToggleFreeway} />
       <div className={styles.section}>
